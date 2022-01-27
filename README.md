@@ -1,3 +1,6 @@
+# Aggregator specific information
+Please refer to [aggregator](pallets/aggregator) for further details. Below is stock standard template information...
+
 # Substrate Node Template
 
 [![Try on playground](https://img.shields.io/badge/Playground-Node_Template-brightgreen?logo=Parity%20Substrate)](https://docs.substrate.io/playground/) [![Matrix](https://img.shields.io/matrix/substrate-technical:matrix.org)](https://matrix.to/#/#substrate-technical:matrix.org)
