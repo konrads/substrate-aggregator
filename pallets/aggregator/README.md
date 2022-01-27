@@ -11,6 +11,7 @@ This is an implementation of a DeFI aggregator, comprising:
 ## Details
 This pallet comprises following structure:
 ```
+  *
   |
   +---- lib.rs
   |
@@ -93,10 +94,8 @@ make populate-keys  # upload keys, once
 |   1   | Bootstrap storage to allow for configuration for price pairs per provider (currently needs root origin extrinsic invocations)                              |   𐄂    |
 |   1   | Investigate keys bootstrap (currently done with curl, see above)                                                                                           |   𐄂    |
 |   1   | Consider abstracting Cost from Amount to allow for more elaborate cost calculations, including transaction fees, slippage, etc                             |   𐄂    |
-| ------| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 |   2   | Split repository into a) pallete branch b) runtime branch                                                                                                  |   𐄂    |
 |   2   | Deploy on testnet                                                                                                                                          |   𐄂    |
 |   2   | Construct Angular UI (to reside on separate branch)                                                                                                        |   𐄂    |
-| ------| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 |   3   | Revise mechanisms for submission of internal price data, ie. with what origin, signed/unsigned transaction, signed/unsigned payload, signed with a refund? |   𐄂    |
 |   3   | Utilize XCM to plug into a real price/trade provider                                                                                                       |   𐄂    |
