@@ -5,12 +5,23 @@ use sp_runtime::RuntimeDebug;
 use sp_runtime::traits::Member;
 use scale_info::TypeInfo;
 use sp_std::vec::Vec;
+use sp_std::str;
 
-pub trait Currency: Member + Parameter + Ord {}
-impl <T: Member + Parameter + Ord> Currency for T {}
+pub trait AsStr {
+    fn as_str(&self) -> &str;
+}
 
-pub trait Provider: Member + Parameter + Ord {}
-impl <T: Member + Parameter + Ord> Provider for T {}
+impl AsStr for Vec<u8> {
+    fn as_str(&self) -> &str {
+        str::from_utf8(self).ok().unwrap()
+    }
+}
+
+pub trait Currency: Member + Parameter + Ord + AsStr {}
+impl <T: Member + Parameter + Ord + AsStr> Currency for T {}
+
+pub trait Provider: Member + Parameter + Ord + AsStr {}
+impl <T: Member + Parameter + Ord + AsStr> Provider for T {}
 
 pub trait Amount: Balance + Ord {}
 impl <T: Balance + Ord> Amount for T {}

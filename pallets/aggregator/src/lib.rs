@@ -23,6 +23,7 @@ pub mod heap;
 pub mod trade_provider;
 pub mod best_path_calculator;
 use sp_std::convert::TryInto;
+use scale_info::prelude::{string::String, format};
 
 #[cfg(test)]
 mod tests;
@@ -129,6 +130,10 @@ pub mod pallet {
 		/// \[source_currency, target_currency, new_cost\]
 		PricePairChanged(T::Currency, T::Currency, T::Amount),
 
+		/// Multiple price changes
+		/// \[{source_currency, target_currency, new_cost, operation}\]
+		MultiplePricePairsChanged(Vec<(T::Currency, T::Currency, T::Amount, Operation)>),
+
 		/// Removal of a price pair.
 		/// \[source_currency, target_currency\]
 		PricePairRemoved(T::Currency, T::Currency),
@@ -232,6 +237,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {  // FIXME: KS: DispatchResultWithPostInfo to reduce the fee? how?
 			ensure_none(origin)?;
 
+			let mut event_payload = vec![];
 			for (ref source, ref target, ref new_path) in best_path_change_payload.changes {
 				BestPaths::<T>::mutate_exists(
 					source,
@@ -240,15 +246,19 @@ pub mod pallet {
 						match new_path {
 							Some(path) => {
 								*old_path = Some(path.clone());  // insert/replace
-								Self::deposit_event(Event::PricePairChanged(source.clone(), target.clone(), path.total_cost));
+								log::info!("Onchain: adding/changing price onchain for {} -> {}: {:?}", source.as_str(), target.as_str(), path.total_cost);
+								event_payload.push((source.clone(), target.clone(), path.total_cost, Operation::Add));
 							}
 							None => if old_path.take().is_some() {
-								Self::deposit_event(Event::PricePairRemoved(source.clone(), target.clone()));   // delete
+								log::info!("Onchain: removing price onchain: {} -> {}", source.as_str(), target.as_str());
+								event_payload.push((source.clone(), target.clone(), T::Amount::default(), Operation::Del));
 							}
 						}
 					}
 				);
 			}
+
+			Self::deposit_event(Event::MultiplePricePairsChanged(event_payload));
 
 			// now increment the block number at which we expect next unsigned transaction.
 			let current_block = <frame_system::Pallet<T>>::block_number();
@@ -449,7 +459,7 @@ impl<T: Config> Pallet<T> {
 	/// A helper function to fetch the price, sign payload and send an unsigned transaction
 	fn fetch_prices_and_update_best_paths(
 		block_number: T::BlockNumber,
-	) -> Result<(), &'static str> {
+	) -> Result<(), String> {
 		let fetched_pairs = <MonitoredPairs<T>>::iter_keys()
 			.map(|pp| (pp.clone(), T::TradeProvider::get_price(pp.provider, pp.pair.source, pp.pair.target)))
 			.filter(|(_, provider_opt)| provider_opt.is_ok())
@@ -458,11 +468,11 @@ impl<T: Config> Pallet<T> {
 			.collect::<Vec<(ProviderPair<_, _>, _)>>();
 
 		if fetched_pairs.is_empty() {
-			log::debug!("No price pairs to update!");
+			log::debug!("Offchain: no price pairs to update!");
 			return Ok(())
 		}
 
-		let new_best_paths: BTreeMap<Pair<_>, PricePath<_, _, _>> = T::BestPathCalculator::calc_best_paths(fetched_pairs).map_err(|_| "Failed to fetch prices")?;  // FIXME: provide reason
+		let new_best_paths: BTreeMap<Pair<_>, PricePath<_, _, _>> = T::BestPathCalculator::calc_best_paths(fetched_pairs).map_err(|e| format!("Failed to calculate best prices due to {:?}", e))?;  // FIXME: provide reason
 
 		// select the best path differences
 		// - elements changed at all and outside of acceptable tolerance
@@ -473,16 +483,25 @@ impl<T: Config> Pallet<T> {
 		for (source, target, old_price_path) in BestPaths::<T>::iter() {  // FIXME: iterating ovr *all* of BestPaths...
 			let pair = Pair{ source: source.clone(), target: target.clone() };
 			match new_best_paths.get(&pair) {
-				Some(new_price_path) if breaches_tolerance(TryInto::<u128>::try_into(old_price_path.total_cost).ok().unwrap(), TryInto::<u128>::try_into(new_price_path.total_cost).ok().unwrap(), tolerance) =>
-					changes.push((source, target, Some(new_price_path.clone()))),
-				None =>
-				    changes.push((source, target, None)),
-				_ => ()
+				Some(new_price_path) => {
+					let old_total_cost = TryInto::<u128>::try_into(old_price_path.total_cost).ok().unwrap();  // FIXME: better way to convert?
+					let new_total_cost = TryInto::<u128>::try_into(new_price_path.total_cost).ok().unwrap();
+					if breaches_tolerance(old_total_cost, new_total_cost, tolerance) {
+						log::info!("Offchain: adding price change for {:?} -> {:?} in excess of tolerance: {:?}: {:?} -> {:?}", pair.source.as_str(), pair.target.as_str(), tolerance, old_total_cost, new_total_cost);
+						changes.push((source, target, Some(new_price_path.clone())));
+					} else {
+						log::info!("Offchain: skipping price change for {:?} -> {:?} within tolerance of {:?}: {:?} -> {:?}", pair.source.as_str(), pair.target.as_str(), tolerance, old_total_cost, new_total_cost);
+					}
+				}
+				None => log::info!("Offchain: no price fetched for {:?} -> {:?}", pair.source.as_str(), pair.target.as_str()),
 			}
 		}
 		for (Pair{source, target}, new_price_path) in new_best_paths.into_iter() {
 			if ! BestPaths::<T>::contains_key(&source, &target) {
+				log::info!("Offchain: adding new price: for {:?} -> {:?}: {:?}", source.as_str(), target.as_str(), &new_price_path.total_cost);
 				changes.push((source, target, Some(new_price_path.clone())))
+			// } else {
+			// 	log::info!("Skipping existing price for {:?} -> {:?}: {:?}", source.as_str(), target.as_str(), &new_price_path);
 			}
 		}
 
@@ -498,7 +517,7 @@ impl<T: Config> Pallet<T> {
 			.ok_or("No local accounts accounts available.")?;
 		result.map_err(|()| "Unable to submit transaction")?;
 
-		log::info!("updated best paths!");
+		log::info!("Offchain: updated best paths!");
 
 		Ok(())
 	}

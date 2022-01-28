@@ -1,2 +1,2 @@
 mod algo;
-pub (crate) mod calculator;
+pub mod calculator;

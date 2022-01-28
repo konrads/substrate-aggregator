@@ -295,7 +295,7 @@ impl pallet_aggregator::Config for Runtime {
 	type UnsignedTxAcceptFreq = UnsignedTxAcceptFreq;
 	type UnsignedPriority = UnsignedPriority;
 	type PriceChangeTolerance = PriceChangeTolerance;
-	type BestPathCalculator = pallet_aggregator::best_path_calculator::noop_calculator::NoBestPathCalculator;
+	type BestPathCalculator = pallet_aggregator::best_path_calculator::floyd_warshall::calculator::FloydWarshallCalculator;
 	type TradeProvider = pallet_aggregator::trade_provider::TradeProviderImpl;
 	type Currency = Vec<u8>;
 	type Provider = Vec<u8>;

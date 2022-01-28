@@ -32,7 +32,7 @@ pub fn get_price(source: Vec<u8>, target: Vec<u8>, scale: u32) -> Result<u128, T
 		},
 	}?;
 
-	log::warn!("Got price: {} cents", price);
+	log::warn!("Got price: {} cents", price as f64 / scale as f64);
 
 	Ok(price)
 }
