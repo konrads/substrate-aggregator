@@ -54,7 +54,7 @@ For longest paths, weights have been multiplied by `-1` and hence reused in shor
 ### OCW
 OCW triggers price fetching, best path calculation, compares with currently stored best path and issues updates via unsigned root origin extrinsic.
 
-OCW trigger is guarded by an `OffchainTriggerFreq` constant ensuring price fetching doesn't happen too frequently, as well as `AcceptNextOcwTxAt` storage / `UnsignedTxAcceptFreq` constant ensuring usnigned transactions are received too frequently.
+OCW trigger is guarded by an `OffchainTriggerFreq` constant ensuring price fetching doesn't happen too frequently, as well as `AcceptNextOcwTxAt` storage / `UnsignedTxAcceptFreq` constant ensuring unsigned transactions are received too frequently.
 
 ### API
 - admin (root origin)
@@ -83,7 +83,7 @@ make clippy         # ensure code quality
 
 make run            # start the project
 make run-node       # start the project, from pre-compiled node
-make populate-keys  # upload keys, once 
+make populate-keys  # upload keys, once node stabilizes
 
 ```
 
@@ -93,7 +93,7 @@ make populate-keys  # upload keys, once
 |   1   | Implement weights, including API allowing for submission of multiple price data                                                                            |   𐄂    |
 |   1   | Bootstrap storage to allow for configuration for price pairs per provider (currently needs root origin extrinsic invocations)                              |   𐄂    |
 |   1   | Investigate keys bootstrap (currently done with curl, see above)                                                                                           |   𐄂    |
-|   1   | Consider abstracting Cost from Amount to allow for more elaborate cost calculations, including transaction fees, slippage, etc                             |   𐄂    |
+|   1   | Consider abstracting Cost (aka Amount) from Balance to allow for more elaborate cost calculations, including transaction fees, slippage, etc               |   𐄂    |
 |   2   | Split repository into a) pallete branch b) runtime branch                                                                                                  |   𐄂    |
 |   2   | Deploy on testnet                                                                                                                                          |   𐄂    |
 |   2   | Construct Angular UI (to reside on separate branch)                                                                                                        |   𐄂    |
