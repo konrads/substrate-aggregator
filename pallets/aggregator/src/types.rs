@@ -7,21 +7,25 @@ use scale_info::TypeInfo;
 use sp_std::vec::Vec;
 use sp_std::str;
 
-pub trait AsStr {
-    fn as_str(&self) -> &str;
+pub trait Conversions {
+    fn to_str(&self) -> &str;
+    fn from_vecu8(vec: Vec<u8>) -> Self;
 }
 
-impl AsStr for Vec<u8> {
-    fn as_str(&self) -> &str {
+impl Conversions for Vec<u8> {
+    fn to_str(&self) -> &str {
         str::from_utf8(self).ok().unwrap()
+    }
+    fn from_vecu8(vec: Vec<u8>) -> Self {
+        return vec
     }
 }
 
-pub trait Currency: Member + Parameter + Ord + AsStr {}
-impl <T: Member + Parameter + Ord + AsStr> Currency for T {}
+pub trait Currency: Member + Parameter + Ord + Conversions {}
+impl <T: Member + Parameter + Ord + Conversions> Currency for T {}
 
-pub trait Provider: Member + Parameter + Ord + AsStr {}
-impl <T: Member + Parameter + Ord + AsStr> Provider for T {}
+pub trait Provider: Member + Parameter + Ord + Conversions {}
+impl <T: Member + Parameter + Ord + Conversions> Provider for T {}
 
 pub trait Amount: Balance + Ord {}
 impl <T: Balance + Ord> Amount for T {}

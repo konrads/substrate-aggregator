@@ -28,6 +28,11 @@ use scale_info::prelude::{string::String, format};
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+pub mod weights;
+pub use weights::WeightInfo;
+
 /// Key for the next offchain trigger.
 pub const NEXT_OFFCHAIN_TRIGGER_STORAGE: &[u8] = b"aggregator::next_offchain_trigger";
 
@@ -182,6 +187,8 @@ pub mod pallet {
 		/// Dynamic implementation of the trade provider
 		type TradeProvider: TradeProvider<Self::Currency, Self::Provider, Self::Amount>;
 
+		type WeightInfo: WeightInfo;
+
 		// Configuration parameters
 
 		/// Frequency of offchain worker trigger.
@@ -246,11 +253,11 @@ pub mod pallet {
 						match new_path {
 							Some(path) => {
 								*old_path = Some(path.clone());  // insert/replace
-								log::info!("Onchain: adding/changing price onchain for {} -> {}: {:?}", source.as_str(), target.as_str(), path.total_cost);
+								log::info!("Onchain: adding/changing price onchain for {} -> {}: {:?}", source.to_str(), target.to_str(), path.total_cost);
 								event_payload.push((source.clone(), target.clone(), path.total_cost, Operation::Add));
 							}
 							None => if old_path.take().is_some() {
-								log::info!("Onchain: removing price onchain: {} -> {}", source.as_str(), target.as_str());
+								log::info!("Onchain: removing price onchain: {} -> {}", source.to_str(), target.to_str());
 								event_payload.push((source.clone(), target.clone(), T::Amount::default(), Operation::Del));
 							}
 						}
@@ -268,7 +275,9 @@ pub mod pallet {
 		}
 
 		/// Add price pair
-		#[pallet::weight(100)]
+		#[pallet::weight(
+			T::WeightInfo::add_price_pair_new().max(T::WeightInfo::add_price_pair_existing())
+        )]
 		pub fn add_price_pair(
 			origin: OriginFor<T>,
 			source: T::Currency, target: T::Currency, provider: T::Provider) -> DispatchResult {
@@ -487,18 +496,18 @@ impl<T: Config> Pallet<T> {
 					let old_total_cost = TryInto::<u128>::try_into(old_price_path.total_cost).ok().unwrap();  // FIXME: better way to convert?
 					let new_total_cost = TryInto::<u128>::try_into(new_price_path.total_cost).ok().unwrap();
 					if breaches_tolerance(old_total_cost, new_total_cost, tolerance) {
-						log::info!("Offchain: adding price change for {:?} -> {:?} in excess of tolerance: {:?}: {:?} -> {:?}", pair.source.as_str(), pair.target.as_str(), tolerance, old_total_cost, new_total_cost);
+						log::info!("Offchain: adding price change for {:?} -> {:?} in excess of tolerance: {:?}: {:?} -> {:?}", pair.source.to_str(), pair.target.to_str(), tolerance, old_total_cost, new_total_cost);
 						changes.push((source, target, Some(new_price_path.clone())));
 					} else {
-						log::info!("Offchain: skipping price change for {:?} -> {:?} within tolerance of {:?}: {:?} -> {:?}", pair.source.as_str(), pair.target.as_str(), tolerance, old_total_cost, new_total_cost);
+						log::info!("Offchain: skipping price change for {:?} -> {:?} within tolerance of {:?}: {:?} -> {:?}", pair.source.to_str(), pair.target.to_str(), tolerance, old_total_cost, new_total_cost);
 					}
 				}
-				None => log::info!("Offchain: no price fetched for {:?} -> {:?}", pair.source.as_str(), pair.target.as_str()),
+				None => log::info!("Offchain: no price fetched for {:?} -> {:?}", pair.source.to_str(), pair.target.to_str()),
 			}
 		}
 		for (Pair{source, target}, new_price_path) in new_best_paths.into_iter() {
 			if ! BestPaths::<T>::contains_key(&source, &target) {
-				log::info!("Offchain: adding new price: for {:?} -> {:?}: {:?}", source.as_str(), target.as_str(), &new_price_path.total_cost);
+				log::info!("Offchain: adding new price: for {:?} -> {:?}: {:?}", source.to_str(), target.to_str(), &new_price_path.total_cost);
 				changes.push((source, target, Some(new_price_path.clone())))
 			// } else {
 			// 	log::info!("Skipping existing price for {:?} -> {:?}: {:?}", source.as_str(), target.as_str(), &new_price_path);

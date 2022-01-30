@@ -26,6 +26,7 @@ lite-json =     { version = "0.1", default-features = false }
 log =           { version = "0.4.14", default-features = false }
 parking_lot =   { version = "0.11.2" }
 num-traits =    { version = "0.2.14", default-features = false, features = ["libm"] }
+frame-benchmarking = { git = "https://github.com/paritytech/substrate.git", tag = "devhub/latest", version = "4.0.0-dev", default-features = false, optional = true }
 
 [features]
 default = ["std"]
@@ -41,5 +42,7 @@ std = [
 	"sp-runtime/std",
 	"sp-std/std",
 	"log/std",
+	"frame-benchmarking/std",
 ]
+runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
 try-runtime = ["frame-support/try-runtime"]

@@ -14,3 +14,7 @@
 
 # direnv cache
 .direnv
+
+# temporary/backup files - useful for dev
+*.bak
+*.tmp

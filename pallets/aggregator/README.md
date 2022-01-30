@@ -83,6 +83,7 @@ make clippy         # ensure code quality
 
 make run            # start the project
 make run-node       # start the project, from pre-compiled node
+sleep 15            # wait for node to stabilize
 make populate-keys  # upload keys, once node stabilizes
 
 ```
@@ -90,12 +91,16 @@ make populate-keys  # upload keys, once node stabilizes
 ## Snags/TODOs
 | Stage | Description                                                                                                                                                | Status |
 | ------| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-|   1   | Implement weights, including API allowing for submission of multiple price data                                                                            |   𐄂    |
+|   1   | Benchmark weights, including API allowing for extrinsics with unbounded vector parameters                                                                  |   𐄂    |
+|   1   | Consider abstracting Cost (aka Amount) from Balance to allow for more elaborate cost calculations, including transaction fees, slippage, etc               |   𐄂    |
 |   1   | Bootstrap storage to allow for configuration for price pairs per provider (currently needs root origin extrinsic invocations)                              |   𐄂    |
 |   1   | Investigate keys bootstrap (currently done with curl, see above)                                                                                           |   𐄂    |
-|   1   | Consider abstracting Cost (aka Amount) from Balance to allow for more elaborate cost calculations, including transaction fees, slippage, etc               |   𐄂    |
-|   2   | Split repository into a) pallete branch b) runtime branch                                                                                                  |   𐄂    |
+|   2   | Split repository into a) aggregator pallet branch b) runtime branch                                                                                        |   𐄂    |
 |   2   | Deploy on testnet                                                                                                                                          |   𐄂    |
 |   2   | Construct Angular UI (to reside on separate branch)                                                                                                        |   𐄂    |
 |   3   | Revise mechanisms for submission of internal price data, ie. with what origin, signed/unsigned transaction, signed/unsigned payload, signed with a refund? |   𐄂    |
 |   3   | Utilize XCM to plug into a real price/trade provider                                                                                                       |   𐄂    |
+
+## Outstanding questions
+* Extrinsics with unbounded vector parameters (eg. `ocw_submit_best_paths_changes()`) - good idea? How to benchmark?
+* Benchmarking utilizes `--wasm-execution interpreted-i-know-what-i-do` as default `compiled` isn't available...
