@@ -89,20 +89,20 @@ sleep 15 && make populate-keys  # in another windowm, upload keys once the node 
 
 Go to [https://polkadot.js.org/apps/#/explorer](https://polkadot.js.org/apps/#/explorer). Ensure you've switched to local node:
 
-<img src="/konrads/substrate-aggregator/raw/main/docs/img/switch-network.png" alt="Switch to local node" style="max-width: 30%;">
+<img src="/docs/img/switch-network.png" alt="Switch to local node" style="max-width: 30%;">
 
 Go to extrinsic menu to submit currency-provider pairs:
 
-<img src="/konrads/substrate-aggregator/raw/main/docs/img/extrinsic-menu.png" alt="Go to extrinsic menu" style="max-width: 40%;">
+<img src="/docs/img/extrinsic-menu.png" alt="Go to extrinsic menu" style="max-width: 40%;">
 
 Notice how adding currency-provider pairs is a sudo call (requires going through `sudo` pallet):
 
-<img src="/konrads/substrate-aggregator/raw/main/docs/img/add-BTC-USDT.png" alt="Add BTC-USDT" style="max-width: 70%;">
-<img src="/konrads/substrate-aggregator/raw/main/docs/img/add-DOT-BTC.png" alt="Add DOT-BTC" style="max-width: 70%;">
+<img src="/docs/img/add-BTC-USDT.png" alt="Add BTC-USDT" style="max-width: 70%;">
+<img src="/docs/img/add-DOT-BTC.png" alt="Add DOT-BTC" style="max-width: 70%;">
 
 Make sure to submit transaction for each:
 
-<img src="/konrads/substrate-aggregator/raw/main/docs/img/submit-transaction.png" alt="Submit transaction" style="max-width: 60%;">
+<img src="/docs/img/submit-transaction.png" alt="Submit transaction" style="max-width: 60%;">
 
 Validate algorithm produces DOT-USDT pair. Note, in case of negative graph cycles (which produces infinite arbitrage opportunities), the algorithm discards the price updates.
 
@@ -112,11 +112,11 @@ Firstly, monitor logs for price updates.
 
 Check onchain storage for DOT-USDT price update. Go to chain state menu:
 
-<img src="/konrads/substrate-aggregator/raw/main/docs/img/chain-state-menu.png" alt="Go to chain state menu" style="max-width: 20%;">
+<img src="/docs/img/chain-state-menu.png" alt="Go to chain state menu" style="max-width: 20%;">
 
 And validate new trading path for DOT-USDT pair: 
 
-<img src="/konrads/substrate-aggregator/raw/main/docs/img/chain-state-DOT-USDT.png" alt="DOT-USDT chain state" style="max-width: 70%;">
+<img src="/docs/img/chain-state-DOT-USDT.png" alt="DOT-USDT chain state" style="max-width: 70%;">
 
 ## Snags/TODOs
 | Stage | Description                                                                                                                                                | Status |
