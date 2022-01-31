@@ -139,3 +139,4 @@ And validate new trading path for DOT-USDT pair:
 ## Outstanding questions
 * Extrinsics with unbounded vector parameters (eg. `ocw_submit_best_paths_changes()`) - good idea? How to benchmark?
 * Benchmarking utilizes `--wasm-execution interpreted-i-know-what-i-do` as default `compiled` isn't available...
+* `submit_price_pairs()` allows unbounded vector, which suggests unbounded memory/weight resources. Research switching to a bounded vector data structure?

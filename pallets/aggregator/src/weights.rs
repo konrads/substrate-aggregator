@@ -29,52 +29,52 @@ pub trait WeightInfo {
 	fn add_price_pair_existing() -> Weight;
 	fn delete_price_pair() -> Weight;
 	fn submit_price_pairs() -> Weight;
-	fn trade() -> Weight;
 	fn ocw_submit_best_paths_changes() -> Weight;
+	fn trade() -> Weight;
 }
 
 /// Weights for pallet_aggregator using the Substrate node and recommended hardware.
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn add_price_pair_nonexisting() -> Weight {
-		(115_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+		(122_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
 	fn add_price_pair_existing() -> Weight {
-		(39_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+		(37_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
 	fn delete_price_pair() -> Weight {
-		(108_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+		(122_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
 	fn submit_price_pairs() -> Weight {
-		(38_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
-	}
-	fn trade() -> Weight {
-		(39_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+		(19_894_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(250 as Weight))			.saturating_add(T::DbWeight::get().writes(250 as Weight))
 	}
 	fn ocw_submit_best_paths_changes() -> Weight {
-		(42_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+		(107_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
+	}
+	fn trade() -> Weight {
+		(137_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
 }
 
 // For backwards compatibility and tests
 impl WeightInfo for () {
 	fn add_price_pair_nonexisting() -> Weight {
-		(115_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
+		(122_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
 	}
 	fn add_price_pair_existing() -> Weight {
-		(39_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
+		(37_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
 	}
 	fn delete_price_pair() -> Weight {
-		(108_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
+		(122_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
 	}
 	fn submit_price_pairs() -> Weight {
-		(38_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
-	}
-	fn trade() -> Weight {
-		(39_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
+		(19_894_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(250 as Weight))			.saturating_add(RocksDbWeight::get().writes(250 as Weight))
 	}
 	fn ocw_submit_best_paths_changes() -> Weight {
-		(42_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
+		(107_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
+	}
+	fn trade() -> Weight {
+		(137_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
 	}
 }
 

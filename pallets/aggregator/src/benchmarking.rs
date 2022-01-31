@@ -39,37 +39,38 @@ benchmarks! {
 		assert!(! MonitoredPairs::<T>::contains_key(ProviderPair{ pair: Pair{ source: source.clone(), target: target.clone() }, provider: provider.clone()}));
 	}
 
-	// FIXME: implement below!
-
 	submit_price_pairs {
-		let source = T::Currency::from_vecu8(b"ACA".to_vec());
-		let target = T::Currency::from_vecu8(b"KAR".to_vec());
-		let provider = T::Provider::from_vecu8(b"cryptocompare".to_vec());
-		MonitoredPairs::<T>::insert(ProviderPair{ pair: Pair{ source: source.clone(), target: target.clone() }, provider: provider.clone() }, None::<()>);
-	}: add_price_pair(RawOrigin::Root, source.clone(), target.clone(), provider.clone())
-	verify {
-		assert!(MonitoredPairs::<T>::contains_key(ProviderPair{ pair: Pair{ source: source.clone(), target: target.clone() }, provider: provider.clone()}));
-	}
-
-	trade {
-		let source = T::Currency::from_vecu8(b"ACA".to_vec());
-		let target = T::Currency::from_vecu8(b"KAR".to_vec());
-		let provider = T::Provider::from_vecu8(b"cryptocompare".to_vec());
-		MonitoredPairs::<T>::insert(ProviderPair{ pair: Pair{ source: source.clone(), target: target.clone() }, provider: provider.clone() }, None::<()>);
-	}: add_price_pair(RawOrigin::Root, source.clone(), target.clone(), provider.clone())
-	verify {
-		assert!(MonitoredPairs::<T>::contains_key(ProviderPair{ pair: Pair{ source: source.clone(), target: target.clone() }, provider: provider.clone()}));
-	}
+		// FIXME: unbounded vector suggests unbounded weights... here only testing for 250
+		let i in 0 .. 250;
+		let mut pairs = vec![];
+		for j in 0..i {
+			let k = j as u8;
+			let op = if k % 2 == 0 { Operation::Add } else { Operation::Del };
+			let source = T::Currency::from_vecu8(vec![k % 255_u8,     (k+1) % 255_u8, (k+2) % 255_u8]);
+			let target = T::Currency::from_vecu8(vec![(k+1) % 255_u8, (k+2) % 255_u8, (k+3) % 255_u8]);
+			let provider = T::Provider::from_vecu8(b"cryptocompare".to_vec());
+			pairs.push((
+				source.clone(),
+				target.clone(),
+				provider.clone(),
+				op.clone(),
+			));
+			if op == Operation::Del {
+				MonitoredPairs::<T>::insert(ProviderPair{ pair: Pair{ source, target }, provider }, None::<()>);
+			}
+		}
+	}: submit_price_pairs(RawOrigin::Root, pairs)
 
 	ocw_submit_best_paths_changes {
-		let source = T::Currency::from_vecu8(b"ACA".to_vec());
-		let target = T::Currency::from_vecu8(b"KAR".to_vec());
-		let provider = T::Provider::from_vecu8(b"cryptocompare".to_vec());
-		MonitoredPairs::<T>::insert(ProviderPair{ pair: Pair{ source: source.clone(), target: target.clone() }, provider: provider.clone() }, None::<()>);
-	}: add_price_pair(RawOrigin::Root, source.clone(), target.clone(), provider.clone())
-	verify {
-		assert!(MonitoredPairs::<T>::contains_key(ProviderPair{ pair: Pair{ source: source.clone(), target: target.clone() }, provider: provider.clone()}));
-	}
+		// FIXME: implement
+		// params: origin: OriginFor<T>,  -- none
+		//         best_path_change_payload: BestPathChangesPayload<T::Public, T::BlockNumber, T::Currency, T::Provider, T::Amount>,  // FIXME: need Box<dyn PairChange>
+		//         _signature: T::Signature,      // FIXME: KS: what is the signature, why needed?
+	}: add_price_pair(RawOrigin::Root, T::Currency::from_vecu8(b"ACA".to_vec()), T::Currency::from_vecu8(b"KAR".to_vec()), T::Provider::from_vecu8(b"cryptocompare".to_vec()))
+
+	trade {
+		// FIXME: benchmark *after* fully implementing trade()
+	}: add_price_pair(RawOrigin::Root, T::Currency::from_vecu8(b"ACA".to_vec()), T::Currency::from_vecu8(b"KAR".to_vec()), T::Provider::from_vecu8(b"cryptocompare".to_vec()))
 
 	impl_benchmark_test_suite!(Aggregator, crate::mock::new_test_ext(), crate::mock::Test);
 }
