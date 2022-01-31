@@ -17,7 +17,7 @@ impl Conversions for Vec<u8> {
         str::from_utf8(self).ok().unwrap()
     }
     fn from_vecu8(vec: Vec<u8>) -> Self {
-        return vec
+        vec
     }
 }
 

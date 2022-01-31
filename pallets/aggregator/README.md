@@ -77,16 +77,39 @@ In flux, to-be-described...
 
 ## Usage
 ```bash
-make build          # build pallet/runtime
-make test           # verify build
-make clippy         # ensure code quality
+make build                      # build pallet/runtime
+make test                       # verify build
+make clippy                     # ensure code quality
 
-make run            # start the project
-make run-node       # start the project, from pre-compiled node
-sleep 15            # wait for node to stabilize
-make populate-keys  # upload keys, once node stabilizes
+make run                        # start the project
+make run-node                   # start the project, from pre-compiled node
+sleep 15 && make populate-keys  # in another windowm, upload keys once the node stabilizes
 
 ```
+
+Go to [https://polkadot.js.org/apps/#/explorer](https://polkadot.js.org/apps/#/explorer). Ensure you've switched to local node:
+![Switch to local node](docs/img/switch-network.png)
+
+Go to extrinsic menu to submit currency-provider pairs:
+![Go to extrinsic menu](docs/img/extrinsic-menu.png)
+
+Notice how adding currency-provider pairs is a sudo call (requires going through `sudo` pallet):
+![Add BTC-USDT](docs/img/add-BTC-USDT.png)
+![Add DOT-BTC](docs/img/add-DOT-BTC.png)
+
+Make sure to submit transaction for each:
+![Submit transaction](docs/img/submit-transaction.png)
+
+Validate algorithm produces DOT-USDT pair. Note, in case of negative graph cycles (which produces infinite arbitrage opportunities), the algorithm discards the price updates.
+
+Firstly, monitor logs for price updates. 
+![Submit transaction](docs/img/price-update-logs.png)
+
+Check onchain storage for DOT-USDT price update. Go to chain state menu:
+![Go to chain state menu](docs/img/chain-state-menu.png)
+
+And validate new trading path for DOT-USDT pair: 
+![DOT-USDT chain state](docs/img/chain-state-DOT-USDT.png)
 
 ## Snags/TODOs
 | Stage | Description                                                                                                                                                | Status |

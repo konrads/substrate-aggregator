@@ -146,6 +146,7 @@ impl Config for Test {
     type Currency = Vec<u8>;
     type Provider = Vec<u8>;
 	type Amount = u64;
+	type WeightInfo = ();
 }
 
 /// Return text externalities after first block, as events only get issued after the first block

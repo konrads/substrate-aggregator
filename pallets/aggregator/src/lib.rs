@@ -514,19 +514,23 @@ impl<T: Config> Pallet<T> {
 			}
 		}
 
-		// -- Sign using any account
-		let (_, result) = Signer::<T, T::AuthorityId>::any_account()  // vs all_accounts()?
-			.send_unsigned_transaction(
-				|account| BestPathChangesPayload { block_number, changes: changes.clone(), public: account.public.clone() },
-				|payload, signature| Call::ocw_submit_best_paths_changes {
-					best_path_change_payload: payload,
-					signature,
-				},
-			)
-			.ok_or("No local accounts accounts available.")?;
-		result.map_err(|()| "Unable to submit transaction")?;
+		if changes.is_empty() {
+			log::info!("Offchain: detected no price changes that breached tolerance level")
+		} else {
+			// -- Sign using any account
+			let (_, result) = Signer::<T, T::AuthorityId>::any_account()  // vs all_accounts()?
+				.send_unsigned_transaction(
+					|account| BestPathChangesPayload { block_number, changes: changes.clone(), public: account.public.clone() },
+					|payload, signature| Call::ocw_submit_best_paths_changes {
+						best_path_change_payload: payload,
+						signature,
+					},
+				)
+				.ok_or("No local accounts accounts available.")?;
+			result.map_err(|()| "Unable to submit transaction")?;
 
-		log::info!("Offchain: updated best paths!");
+			log::info!("Offchain: updated best paths!");
+		}
 
 		Ok(())
 	}
