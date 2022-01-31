@@ -21,6 +21,10 @@ This pallet comprises following structure:
   |
   +---- heap.rs
   |
+  +---- benchmarking.rs
+  |
+  +---- weights.rs
+  |
   +----+ best_path_calculator
   |    |
   |    +----- noop
@@ -35,6 +39,7 @@ This pallet comprises following structure:
 - [types.rs](src/types.rs) - types utilized throughout
 - [utils.rs](src/utils.rs) - common utils
 - [heap.rs](src/heap.rs) - heap implementation
+- [benchmarking.rs](src/benchmarking.rs) and [weights.rs](src/weights.rs) - weights produced by benchmarking
 - [best_path_calculator/floyd_warshall](best_path_calculator/floyd_warshall) - implementation of a shortest/longest path algorithm, comprising:
   - Floyd-Warshall implementation as per https://www.youtube.com/watch?v=oNI0rf2P9gE&ab_channel=AbdulBari
   - longest path implementation with weight multiplications, as per https://www.coursera.org/lecture/algorithms-on-graphs/currency-exchange-reduction-to-shortest-paths-cw8Tm
