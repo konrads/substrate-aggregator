@@ -124,7 +124,7 @@ pub mod pallet {
 		_,
 		Blake2_128Concat,
 		ProviderPair<T::Currency, T::Provider>,
-		Option<()>,  // membership in the map indicates price is to be fetched, Some(()) - existance of the latest price
+		Option<()>,  // membership in the map indicates price is to be fetched, Some(()) - existence of the latest price
 	>;
 
 	/// Events for the pallet.

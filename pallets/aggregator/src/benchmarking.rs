@@ -11,20 +11,17 @@ benchmarks! {
 		let sources = vec![b"BTC".to_vec(), b"ETH".to_vec(), b"DOT".to_vec(), b"ADA".to_vec(), b"USDT".to_vec(), b"CRO".to_vec(), b"BTC".to_vec(), b"BNB".to_vec(), b"ACA".to_vec(), b"KAR".to_vec()];
 		let mut targets = sources.clone();
 		targets.rotate_right(3);
-		let provider = b"cryptocompare".to_vec();  // using existing price provider only, for most expensive scenario
-		let source = sources[i as usize].clone();
-		let target = targets[i as usize].clone();
-	}: add_price_pair(RawOrigin::Root, T::Currency::from_vecu8(source), T::Currency::from_vecu8(target), T::Provider::from_vecu8(provider))
+		let source = T::Currency::from_vecu8(sources[i as usize].clone());
+		let target = T::Currency::from_vecu8(targets[i as usize].clone());
+		let provider = T::Provider::from_vecu8(b"cryptocompare".to_vec());  // using existing price provider only, for most expensive scenario
+	}: add_price_pair(RawOrigin::Root, source, target, provider)
 
 	add_price_pair_existing {
-		let i in 0 .. 9;
-		let sources = vec![b"BTC".to_vec(), b"ETH".to_vec(), b"DOT".to_vec(), b"ADA".to_vec(), b"USDT".to_vec(), b"CRO".to_vec(), b"BTC".to_vec(), b"BNB".to_vec(), b"ACA".to_vec(), b"KAR".to_vec()];
-		let mut targets = sources.clone();
-		targets.rotate_right(3);
-		let provider = b"cryptocompare".to_vec();  // using existing price provider only, for most expensive scenario
-		let source = sources[i as usize].clone();
-		let target = targets[i as usize].clone();
-	}: add_price_pair(RawOrigin::Root, T::Currency::from_vecu8(source), T::Currency::from_vecu8(target), T::Provider::from_vecu8(provider))
+		let source = T::Currency::from_vecu8(b"ACA".to_vec());
+		let target = T::Currency::from_vecu8(b"KAR".to_vec());
+		let provider = T::Provider::from_vecu8(b"cryptocompare".to_vec());
+		MonitoredPairs::<T>::insert(ProviderPair{ pair: Pair{ source: source.clone(), target: target.clone() }, provider: provider.clone() }, None::<()>);
+	}: add_price_pair(RawOrigin::Root, source, target, provider)
 
 	// TDB
 

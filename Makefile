@@ -20,7 +20,7 @@ export KEYSTORE_POPULATE_PAYLOAD
 
 export RUST_BACKTRACE=1
 
-all: usage
+all: build test clippy
 
 clean:
 	cargo clean
