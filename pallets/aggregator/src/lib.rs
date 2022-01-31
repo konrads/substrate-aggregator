@@ -276,7 +276,7 @@ pub mod pallet {
 
 		/// Add price pair
 		#[pallet::weight(
-			T::WeightInfo::add_price_pair_new().max(T::WeightInfo::add_price_pair_existing())
+			T::WeightInfo::add_price_pair_nonexisting().max(T::WeightInfo::add_price_pair_existing())
         )]
 		pub fn add_price_pair(
 			origin: OriginFor<T>,
@@ -294,7 +294,7 @@ pub mod pallet {
 			})
 		}
 
-		#[pallet::weight(100)]
+		#[pallet::weight(T::WeightInfo::delete_price_pair())]
 		pub fn delete_price_pair(
 			origin: OriginFor<T>,
 			source: T::Currency, target: T::Currency, provider: T::Provider) -> DispatchResult {
@@ -310,7 +310,7 @@ pub mod pallet {
 		}
 
 		/// Provided externally, by eg. root user, to inform ocw of additional pairs
-		#[pallet::weight(100)]
+		#[pallet::weight(T::WeightInfo::submit_price_pairs())]
 		#[frame_support::transactional]
 		pub fn submit_price_pairs(
 			origin: OriginFor<T>,
@@ -346,7 +346,7 @@ pub mod pallet {
 		}
 
 		/// Trade as per available prices.
-		#[pallet::weight(100)]
+		#[pallet::weight(T::WeightInfo::trade())]
 		pub fn trade(
 			origin: OriginFor<T>,
 			source: T::Currency, target: T::Currency, amount: T::Amount) -> DispatchResult {
