@@ -88,28 +88,35 @@ sleep 15 && make populate-keys  # in another windowm, upload keys once the node 
 ```
 
 Go to [https://polkadot.js.org/apps/#/explorer](https://polkadot.js.org/apps/#/explorer). Ensure you've switched to local node:
-![Switch to local node](/docs/img/switch-network.png)
+
+<img src="/konrads/substrate-aggregator/raw/main/docs/img/switch-network.png" alt="Switch to local node" style="max-width: 30%;">
 
 Go to extrinsic menu to submit currency-provider pairs:
-![Go to extrinsic menu](/docs/img/extrinsic-menu.png)
+
+<img src="/konrads/substrate-aggregator/raw/main/docs/img/extrinsic-menu.png" alt="Go to extrinsic menu" style="max-width: 40%;">
 
 Notice how adding currency-provider pairs is a sudo call (requires going through `sudo` pallet):
-![Add BTC-USDT](/docs/img/add-BTC-USDT.png)
-![Add DOT-BTC](/docs/img/add-DOT-BTC.png)
+
+<img src="/konrads/substrate-aggregator/raw/main/docs/img/add-BTC-USDT.png" alt="Add BTC-USDT" style="max-width: 70%;">
+<img src="/konrads/substrate-aggregator/raw/main/docs/img/add-DOT-BTC.png" alt="Add DOT-BTC" style="max-width: 70%;">
 
 Make sure to submit transaction for each:
-![Submit transaction](/docs/img/submit-transaction.png)
+
+<img src="/konrads/substrate-aggregator/raw/main/docs/img/submit-transaction.png" alt="Submit transaction" style="max-width: 60%;">
 
 Validate algorithm produces DOT-USDT pair. Note, in case of negative graph cycles (which produces infinite arbitrage opportunities), the algorithm discards the price updates.
 
 Firstly, monitor logs for price updates. 
-![Submit transaction](/docs/img/price-update-logs.png)
+
+![View price update logs](/docs/img/price-update-logs.png)
 
 Check onchain storage for DOT-USDT price update. Go to chain state menu:
-![Go to chain state menu](/docs/img/chain-state-menu.png)
+
+<img src="/konrads/substrate-aggregator/raw/main/docs/img/chain-state-menu.png" alt="Go to chain state menu" style="max-width: 20%;">
 
 And validate new trading path for DOT-USDT pair: 
-![DOT-USDT chain state](/docs/img/chain-state-DOT-USDT.png)
+
+<img src="/konrads/substrate-aggregator/raw/main/docs/img/chain-state-DOT-USDT.png" alt="DOT-USDT chain state" style="max-width: 70%;">
 
 ## Snags/TODOs
 | Stage | Description                                                                                                                                                | Status |
