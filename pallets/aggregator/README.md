@@ -45,8 +45,6 @@ This pallet comprises following structure:
   - longest path implementation with weight multiplications, as per https://www.coursera.org/lecture/algorithms-on-graphs/currency-exchange-reduction-to-shortest-paths-cw8Tm
 - [trade_provider/crypto_compare] - price data fetcher, as lifted from OCW example
 
-simple example, assumes only provided pairs are reachable
-
 ### Longest path algorithm
 For longest path calculations, Floyd-Warshall algorithm was chosen for its ability to calculate shortest/longest paths across all vertices.
 
