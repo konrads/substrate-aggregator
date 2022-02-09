@@ -8,7 +8,6 @@ pub fn get_price(source: Vec<u8>, target: Vec<u8>, scale: u32) -> Result<u128, T
 	let url_bin = concat4(b"https://min-api.cryptocompare.com/data/price?fsym=", &source, b"&tsyms=", &target);
 	let url = str::from_utf8(&url_bin).map_err(|err| {
 		log::error!("url utf8 parsing error: {:?}", err);
-		// FIXME: change to common error
 		http::Error::Unknown
 	})?;
 	let request = http::Request::get(url);
@@ -32,7 +31,7 @@ pub fn get_price(source: Vec<u8>, target: Vec<u8>, scale: u32) -> Result<u128, T
 		},
 	}?;
 
-	log::warn!("Got price: {} cents", price as f64 / scale as f64);
+	log::info!("Got price: {}", price as f64 / scale as f64);
 
 	Ok(price)
 }

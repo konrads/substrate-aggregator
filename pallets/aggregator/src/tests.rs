@@ -118,8 +118,7 @@ where
 }
 
 parameter_types! {
-	pub const UnsignedTxAcceptFreq: u64 = 1;
-	pub const OffchainTriggerFreq: u64 = 1;
+	pub const OffchainTriggerDelay: u64 = 1;
 	pub const UnsignedPriority: u64 = 1 << 20;
     pub const PriceChangeTolerance: u32 = 1;
 }
@@ -137,8 +136,7 @@ impl Config for Test {
 	type AuthorityId = crypto::TestAuthId;
 	type Call = Call;
     // aggregator specific
-	type OffchainTriggerFreq = OffchainTriggerFreq;
-	type UnsignedTxAcceptFreq = UnsignedTxAcceptFreq;
+	type OffchainTriggerDelay = OffchainTriggerDelay;
 	type UnsignedPriority = UnsignedPriority;
     type PriceChangeTolerance = PriceChangeTolerance;
     type BestPathCalculator = best_path_calculator::noop_calculator::NoBestPathCalculator;
@@ -156,7 +154,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 	t
 }
 
-pub fn new_test_ext_with_keystore() -> (sp_io::TestExternalities, Arc<RwLock<PoolState>>, sp_core::sr25519::Public) {
+pub fn new_test_ext_with_keystore() -> (sp_io::TestExternalities, testing::TestOffchainExt, Arc<RwLock<PoolState>>, sp_core::sr25519::Public) {
 	const PHRASE: &str = "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
 	let (offchain, _offchain_state) = testing::TestOffchainExt::new();
 	let (pool, pool_state) = testing::TestTransactionPoolExt::new();
@@ -173,10 +171,10 @@ pub fn new_test_ext_with_keystore() -> (sp_io::TestExternalities, Arc<RwLock<Poo
 		.clone();
 	let mut t = sp_io::TestExternalities::default();
 	t.register_extension(OffchainWorkerExt::new(offchain.clone()));
-	t.register_extension(OffchainDbExt::new(offchain));
+	t.register_extension(OffchainDbExt::new(offchain.clone()));
 	t.register_extension(TransactionPoolExt::new(pool));
 	t.register_extension(KeystoreExt(Arc::new(keystore)));
-	(t, pool_state, public_key)
+	(t, offchain, pool_state, public_key)
 }
 
 fn last_event() -> Option<Event> {
@@ -286,9 +284,9 @@ fn test_trade() {
 
 #[test]
 fn test_ocw_submit_best_paths_changes() {
-	let (t, _, public_key) = &mut new_test_ext_with_keystore();	
+	let (t, _, _, public_key) = &mut new_test_ext_with_keystore();
 	let payload = BestPathChangesPayload {
-		block_number: 1,
+		nonce: 0,
 		changes: vec![(BTC_CURRENCY.to_vec(), USDT_CURRENCY.to_vec(), Some(PricePath{total_cost: 50000, steps: vec![]}))],
 		public: <Test as SigningTypes>::Public::from(*public_key),
 	};
@@ -298,40 +296,33 @@ fn test_ocw_submit_best_paths_changes() {
 		let signature = 
 			<BestPathChangesPayload<
 				<Test as SigningTypes>::Public,
-				<Test as frame_system::Config>::BlockNumber,
 				<Test as Config>::Currency,
 				<Test as Config>::Provider,
 				<Test as Config>::Amount,
 			> as SignedPayload<Test>>::sign::<crypto::TestAuthId>(&payload).unwrap();
-
-		assert_eq!(AcceptNextOcwTxAt::<Test>::get(), 0);
-		assert_ok!(Fixture::ocw_submit_best_paths_changes(Origin::none(), payload, signature));
-		assert_eq!(AcceptNextOcwTxAt::<Test>::get(), 1);
+		assert_ok!(Fixture::ocw_submit_best_paths_changes(Origin::none(), payload.clone(), signature.clone()));
+		assert_noop!(Fixture::ocw_submit_best_paths_changes(Origin::none(), payload, signature), Error::<Test>::StaleOffchainNonceError);
 	});
 
 	// verify with bogus
-	let (t, _, _) = &mut new_test_ext_with_keystore();	
+	let (t, _, _, _) = &mut new_test_ext_with_keystore();
 	t.execute_with(|| {
 		let signature = 
 			<BestPathChangesPayload<
 				<Test as SigningTypes>::Public,
-				<Test as frame_system::Config>::BlockNumber,
 				<Test as Config>::Currency,
 				<Test as Config>::Provider,
 				<Test as Config>::Amount,
 			> as SignedPayload<Test>>::sign::<crypto::TestAuthId>(&payload2).unwrap();
-
-		assert_eq!(AcceptNextOcwTxAt::<Test>::get(), 0);
 		assert_noop!(Fixture::ocw_submit_best_paths_changes(Origin::root(), payload2, signature), BadOrigin);
-		assert_eq!(AcceptNextOcwTxAt::<Test>::get(), 0);  // no update to AcceptNextOcwTxAt
 	});
 }
 
 #[test]
 fn test_fetch_prices_and_update_best_paths() {
-	let (t, pool_state, public_key) = &mut new_test_ext_with_keystore();	
+	let (t, _, pool_state, public_key) = &mut new_test_ext_with_keystore();
 	let payload = BestPathChangesPayload {
-		block_number: 1,
+		nonce: 0,
 		changes: vec![(BTC_CURRENCY.to_vec(), USDT_CURRENCY.to_vec(), Some(PricePath{total_cost: 50000, steps: vec![]}))],
 		public: <Test as SigningTypes>::Public::from(*public_key),
 	};
@@ -342,7 +333,7 @@ fn test_fetch_prices_and_update_best_paths() {
 			ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()}, 
 			None::<()>);
 
-		assert!(Fixture::fetch_prices_and_update_best_paths(1).is_ok());
+		assert!(Fixture::fetch_prices_and_update_best_paths().is_ok());
 		let tx = pool_state.write().transactions.pop().unwrap();
         assert!(pool_state.read().transactions.is_empty());
         let decoded_tx = Extrinsic::decode(&mut &*tx).unwrap();
@@ -357,7 +348,6 @@ fn test_fetch_prices_and_update_best_paths() {
 			let signature_valid =
 				<BestPathChangesPayload<
 					<Test as SigningTypes>::Public,
-					<Test as frame_system::Config>::BlockNumber,
 					<Test as Config>::Currency,
 					<Test as Config>::Provider,
 					<Test as Config>::Amount,
@@ -368,22 +358,22 @@ fn test_fetch_prices_and_update_best_paths() {
 	});
 
 	// verify no extrinsics on bogus provider in MonitoredPairs
-	let (t, pool_state, _) = &mut new_test_ext_with_keystore();
+	let (t, _, pool_state, _) = &mut new_test_ext_with_keystore();
 	t.execute_with(|| {
 		MonitoredPairs::<Test>::insert(
 			ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: BOGUS_PROVIDER.to_vec()}, 
 			None::<()>);
 
-		assert!(Fixture::fetch_prices_and_update_best_paths(1).is_ok());
+		assert!(Fixture::fetch_prices_and_update_best_paths().is_ok());
 		assert!(pool_state.write().transactions.is_empty());
 	});
 }
 
 #[test]
 fn test_should_trigger_offchain() {
-	let (t, _, _) = &mut new_test_ext_with_keystore();
+	let (t, _, _, _) = &mut new_test_ext_with_keystore();
 	t.execute_with(|| {
-		StorageValueRef::persistent(NEXT_OFFCHAIN_TRIGGER_STORAGE).set(&10_u64);
+		StorageValueRef::persistent(NEXT_OFFCHAIN_TRIGGER).set(&10_u64);
 		assert!(! Fixture::should_trigger_offchain(9));
 		assert!(Fixture::should_trigger_offchain(10));
 		assert!(Fixture::should_trigger_offchain(11));

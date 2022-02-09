@@ -11,6 +11,7 @@
 
 #![allow(unused_parens)]
 #![allow(unused_imports)]
+#![allow(clippy::unnecessary_cast)]
 
 use frame_support::{traits::Get, weights::{Weight, constants::RocksDbWeight}};
 use sp_std::marker::PhantomData;
@@ -19,7 +20,11 @@ use sp_std::marker::PhantomData;
 pub trait WeightInfo {
 	{{~#each benchmarks as |benchmark|}}
 
-	fn {{benchmark.name~}}() -> Weight;
+	fn {{benchmark.name~}}
+	(
+		{{~#each benchmark.components as |c| ~}}
+		{{~#if (not c.is_used)}}_{{/if}}{{c.name}}: usize, {{/each~}}
+	) -> Weight;
 	{{~/each}}
 
 }
@@ -29,7 +34,10 @@ pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	{{~#each benchmarks as |benchmark|}}
 
-	fn {{benchmark.name~}}() -> Weight {
+	fn {{benchmark.name~}}(
+		{{~#each benchmark.components as |c| ~}}
+		{{~#if (not c.is_used)}}_{{/if}}{{c.name}}: usize, {{/each~}}
+	) -> Weight {
 		({{underscore benchmark.base_weight}} as Weight)
 			{{~#each benchmark.component_weight as |cw|}}
 			// Standard Error: {{underscore cw.error}}
@@ -57,7 +65,10 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 impl WeightInfo for () {
 	{{~#each benchmarks as |benchmark|}}
 
-	fn {{benchmark.name~}}() -> Weight {
+	fn {{benchmark.name~}}(
+		{{~#each benchmark.components as |c| ~}}
+		{{~#if (not c.is_used)}}_{{/if}}{{c.name}}: usize, {{/each~}}
+	) -> Weight {
 		({{underscore benchmark.base_weight}} as Weight)
 			{{~#each benchmark.component_weight as |cw|}}
 			// Standard Error: {{underscore cw.error}}
