@@ -31,7 +31,7 @@ pub trait WeightInfo {
 	fn delete_price_pair() -> Weight;
 	fn submit_price_pairs(_i: usize, ) -> Weight;
 	fn ocw_submit_best_paths_changes(_i: usize, ) -> Weight;
-	fn add_offchain_authority() -> Weight;
+	fn add_whitelisted_offchain_authority() -> Weight;
 	fn trade() -> Weight;
 }
 
@@ -53,7 +53,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn ocw_submit_best_paths_changes(_i: usize, ) -> Weight {
 		(143_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
-	fn add_offchain_authority() -> Weight {
+	fn add_whitelisted_offchain_authority() -> Weight {
 		(138_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
 	fn trade() -> Weight {
@@ -78,7 +78,7 @@ impl WeightInfo for () {
 	fn ocw_submit_best_paths_changes(_i: usize, ) -> Weight {
 		(143_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
 	}
-	fn add_offchain_authority() -> Weight {
+	fn add_whitelisted_offchain_authority() -> Weight {
 		(138_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
 	}
 	fn trade() -> Weight {

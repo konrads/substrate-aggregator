@@ -126,15 +126,15 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	pub(super) type OffchainAuthorities<T: Config> = StorageMap<
+	pub(super) type WhitelistedOffchainAuthorities<T: Config> = StorageMap<
 		_,
 		Blake2_128Concat,
-		T::AccountId,  // authoritative
+		T::AccountId,
 		(),
 	>;
 
 	#[pallet::storage]
-	pub(super) type OffchainNonce<T: Config> = StorageValue<
+	pub(super) type UnsignedTxNonce<T: Config> = StorageValue<
 		_,
 		u64,
 		ValueQuery,
@@ -170,7 +170,7 @@ pub mod pallet {
 
 		/// Added offchain authority account, for validation of offchain signed payloads.
 		/// \[account_id\]
-		OffchainAuthorityAdded(T::AccountId),
+		WhitelistedOffchainAuthorityAdded(T::AccountId),
 	}
 
 	// Errors inform users that something went wrong.
@@ -265,7 +265,7 @@ pub mod pallet {
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
-			let current_nonce = <OffchainNonce<T>>::get();
+			let current_nonce = <UnsignedTxNonce<T>>::get();
 			ensure!(current_nonce == best_path_change_payload.nonce, Error::<T>::StaleOffchainNonceError);
 
 			let mut event_payload = vec![];
@@ -290,7 +290,7 @@ pub mod pallet {
 				);
 			}
 
-			<OffchainNonce<T>>::set(current_nonce + 1);
+			<UnsignedTxNonce<T>>::set(current_nonce + 1);
 			Self::deposit_event(Event::MultiplePricePairsChanged(event_payload));
 			Ok(Pays::No.into())
 	}
@@ -330,14 +330,14 @@ pub mod pallet {
 			})
 		}
 
-		#[pallet::weight(T::WeightInfo::add_offchain_authority())]
-		pub fn add_offchain_authority(
+		#[pallet::weight(T::WeightInfo::add_whitelisted_offchain_authority())]
+		pub fn add_whitelisted_offchain_authority(
 			origin: OriginFor<T>,
 			offchain_authority: T::AccountId) -> DispatchResult {
 			ensure_root(origin)?;
 
-			Self::deposit_event(Event::OffchainAuthorityAdded(offchain_authority.clone()));
-			<OffchainAuthorities<T>>::insert(&offchain_authority, ());
+			Self::deposit_event(Event::WhitelistedOffchainAuthorityAdded(offchain_authority.clone()));
+			<WhitelistedOffchainAuthorities<T>>::insert(&offchain_authority, ());
 			Ok(())
 		}
 
@@ -422,7 +422,7 @@ pub mod pallet {
 				}
 
 				let account_id = payload.public.clone().into_account();
-				if !OffchainAuthorities::<T>::contains_key(&account_id) {
+				if !WhitelistedOffchainAuthorities::<T>::contains_key(&account_id) {
 					log::error!("OCW rejected transaction due to signer not on the offchain authority whitelist: {:?}", account_id);
 					return InvalidTransaction::BadProof.into();
 				}
@@ -534,7 +534,7 @@ impl<T: Config> Pallet<T> {
 		} else {
 			let (_, result) = Signer::<T, T::AuthorityId>::any_account()
 				.send_unsigned_transaction(
-					|account| BestPathChangesPayload {changes: changes.clone(), nonce: <OffchainNonce<T>>::get(), public: account.public.clone() },
+					|account| BestPathChangesPayload {changes: changes.clone(), nonce: <UnsignedTxNonce<T>>::get(), public: account.public.clone() },
 					|payload, signature| Call::ocw_submit_best_paths_changes {
 						best_path_change_payload: payload,
 						signature,
