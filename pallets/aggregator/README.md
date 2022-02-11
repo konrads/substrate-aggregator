@@ -96,7 +96,7 @@ Go to [https://polkadot.js.org/apps/#/explorer](https://polkadot.js.org/apps/#/e
 
 Add offchain authority (potentially temporary step, might be automated). Click on `+ Add Account`, enter the mnemonic `clip organ olive upper oak void inject side suit toilet stick narrow`:
 
-<img src="/docs/img/add-offchain-authority-account.png" alt="Add offchain authority account" width="60%">
+<img src="/docs/img/add-offchain-authority-account.png" alt="Add offchain authority account" width="70%">
 
 Proceed by clicking `Next`, name the newly created to eg. `OCW_ADMIN`, click `Next`, `Save`.
 
@@ -107,12 +107,11 @@ Go to extrinsic menu:
 Add the newly created authority to the whitelist. Note, this is done via sudo call (requires going through `sudo` pallet):
 <img src="/docs/img/add-whitelisted-offchain-authority.png" alt="Add whitelisted offchain authority" width="70%">
 
-Submit submit currency-provider pairs via a sudo call:
+Submit monitored currency-provider pairs via a sudo call:
 
-<img src="/docs/img/add-BTC-USDT.png" alt="Add BTC-USDT" width="70%">
-<img src="/docs/img/add-DOT-BTC.png" alt="Add DOT-BTC" width="70%">
+<img src="/docs/img/add-monitored-pairs.png" alt="Add BTC-USDT" width="70%">
 
-Make sure to submit transaction for each:
+Make sure to submit transaction:
 
 <img src="/docs/img/submit-transaction.png" alt="Submit transaction" width="60%">
 

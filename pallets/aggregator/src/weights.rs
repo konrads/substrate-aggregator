@@ -28,8 +28,8 @@ use sp_std::marker::PhantomData;
 pub trait WeightInfo {
 	fn add_price_pair_nonexisting() -> Weight;
 	fn add_price_pair_existing() -> Weight;
-	fn delete_price_pair() -> Weight;
-	fn submit_price_pairs(_i: usize, ) -> Weight;
+	fn remove_price_pair() -> Weight;
+	fn submit_monitored_pairs(_i: usize, ) -> Weight;
 	fn ocw_submit_best_paths_changes(_i: usize, ) -> Weight;
 	fn add_whitelisted_offchain_authority() -> Weight;
 	fn trade() -> Weight;
@@ -44,10 +44,10 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn add_price_pair_existing() -> Weight {
 		(51_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
-	fn delete_price_pair() -> Weight {
+	fn remove_price_pair() -> Weight {
 		(156_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(1 as Weight))			.saturating_add(T::DbWeight::get().writes(1 as Weight))
 	}
-	fn submit_price_pairs(_i: usize, ) -> Weight {
+	fn submit_monitored_pairs(_i: usize, ) -> Weight {
 		(20_827_000_000 as Weight)			.saturating_add(T::DbWeight::get().reads(250 as Weight))			.saturating_add(T::DbWeight::get().writes(250 as Weight))
 	}
 	fn ocw_submit_best_paths_changes(_i: usize, ) -> Weight {
@@ -69,10 +69,10 @@ impl WeightInfo for () {
 	fn add_price_pair_existing() -> Weight {
 		(51_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
 	}
-	fn delete_price_pair() -> Weight {
+	fn remove_price_pair() -> Weight {
 		(156_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(1 as Weight))			.saturating_add(RocksDbWeight::get().writes(1 as Weight))
 	}
-	fn submit_price_pairs(_i: usize, ) -> Weight {
+	fn submit_monitored_pairs(_i: usize, ) -> Weight {
 		(20_827_000_000 as Weight)			.saturating_add(RocksDbWeight::get().reads(250 as Weight))			.saturating_add(RocksDbWeight::get().writes(250 as Weight))
 	}
 	fn ocw_submit_best_paths_changes(_i: usize, ) -> Weight {

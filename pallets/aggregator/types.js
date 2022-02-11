@@ -3,26 +3,33 @@
     "Provider": "Vec<u8>",
     "Amount": "u128",
     "Pair": {
-        "source": "Currency",
-        "target": "Currency",
+        "source":   "Currency",
+        "target":   "Currency",
         "provider": "Provider",
-        "cost": "Amount"
+        "cost":     "Amount"
     },
     "ProviderPair": {
-        "pair": "Pair",
+        "pair":     "Pair",
         "provider": "Provider"
     },
+    "Operation": {
+        "_enum": ["Add", "Del"]
+    },
+    "ProviderPairOperation": {
+        "providerPair": "ProviderPair",
+        "operation":    "Operation"
+    },
     "PathStep": {
-        "pair": "Pair",
+        "pair":     "Pair",
         "provider": "Provider",
-        "cost": "Amount"
+        "cost":     "Amount"
     },
     "PricePath": {
         "total_cost": "Amount",
-        "steps": "Vec<PathStep>"
+        "steps":      "Vec<PathStep>"
     },
-    "Keys": "SessionKeys2",
-    "AccountInfo": "AccountInfoWithDualRefCount",
-    "Address": "MultiAddress",
+    "Keys":         "SessionKeys2",
+    "AccountInfo":  "AccountInfoWithDualRefCount",
+    "Address":      "MultiAddress",
     "LookupSource": "MultiAddress"
 }
