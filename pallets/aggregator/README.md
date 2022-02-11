@@ -131,7 +131,7 @@ And validate new trading path for DOT-USDT pair:
 ## Snags/TODOs
 | Stage | Description                                                                                                                                                | Status |
 | ------| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-|   1   | Benchmark weights, including API allowing for extrinsics with unbounded vector parameters                                                                  |   𐄂    |
+|   1   | Benchmark weights, including API allowing for extrinsics with vector parameters                                                                            |   𐄂    |
 |   1   | Consider abstracting Cost (aka Amount) from Balance to allow for more elaborate cost calculations, including transaction fees, slippage, etc               |   𐄂    |
 |   1   | Bootstrap storage to allow for configuration for price pairs per provider (currently needs root origin extrinsic invocations)                              |   𐄂    |
 |   1   | Investigate keys bootstrap (currently done with curl, see above)                                                                                           |   𐄂    |
@@ -142,6 +142,5 @@ And validate new trading path for DOT-USDT pair:
 |   3   | Utilize XCM to plug into a real price/trade provider                                                                                                       |   𐄂    |
 
 ## Outstanding questions
-* Extrinsics with unbounded vector parameters (eg. `ocw_submit_best_paths_changes()`) - good idea? How to benchmark?
+* Extrinsics with unbounded vector parameters need improved benchmarking, accounting for the length of the vector parameter
 * Benchmarking utilizes `--wasm-execution interpreted-i-know-what-i-do` as default `compiled` isn't available...
-* `submit_price_pairs()` allows unbounded vector, which suggests unbounded memory/weight resources. Research switching to a bounded vector data structure?
