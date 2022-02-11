@@ -17,7 +17,7 @@ const PRECISION: f64 = 1_000_000_000_000.0;
 pub struct FloydWarshallCalculator {}
 impl<C: Currency, P: Provider, A: Amount> BestPathCalculator<C, P, A> for FloydWarshallCalculator {
     /// Wraps Floyd-Warshall's algorithm that uses indexes from/into BestPathCalculator data structures
-	fn calc_best_paths(pairs_and_prices: Vec<(ProviderPair<C, P>, A)>) -> Result<BTreeMap<Pair<C>, PricePath<C, P, A>>, CalculatorError> {
+	fn calc_best_paths(pairs_and_prices: &[(ProviderPair<C, P>, A)]) -> Result<BTreeMap<Pair<C>, PricePath<C, P, A>>, CalculatorError> {
         // get unique and indexed currencies and providers
         let currencies = pairs_and_prices.iter().flat_map(|(ProviderPair { pair: Pair{source, target}, .. }, ..)| vec![source, target].into_iter())
             .collect::<BTreeSet<_>>().into_iter().collect::<Vec<_>>();
@@ -29,7 +29,7 @@ impl<C: Currency, P: Provider, A: Amount> BestPathCalculator<C, P, A> for FloydW
         // construct the graph for Floyd-Warshall lib
         let mut graph = Vec::new();
         for &c in currencies.iter() {
-            for (pp, cost) in pairs_and_prices.iter() {
+            for (pp, cost) in pairs_and_prices {
                 if c == &pp.pair.source {
                     graph.push(algo::Edge {
                         pair:        algo::Pair{source: currencies_by_ind[&pp.pair.source], target: currencies_by_ind[&pp.pair.target]},
@@ -89,7 +89,7 @@ mod tests {
             ("ETH".to_owned(),  "BNB".to_owned(),  "xxx".to_owned(), 6.548),
             ("BNB".to_owned(),  "ETH".to_owned(),  "xxx".to_owned(), 0.1527),
         ].into_iter().map(|(source, target, provider, cost)| (ProviderPair{pair: Pair{source: source.as_str().as_bytes().to_vec(), target: target.as_str().as_bytes().to_vec()}, provider: provider.as_str().as_bytes().to_vec()}, (cost * PRECISION) as u128)).collect::<Vec<_>>();
-        let res_out = FloydWarshallCalculator::calc_best_paths(in_graph).unwrap().into_iter().collect::<Vec<(_, _)>>()
+        let res_out = FloydWarshallCalculator::calc_best_paths(&in_graph).unwrap().into_iter().collect::<Vec<(_, _)>>()
             .into_iter().map(|(p, pp)|(
                 String::from_utf8(p.source).unwrap(),
                 String::from_utf8(p.target).unwrap(),

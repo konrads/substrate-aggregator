@@ -2,19 +2,19 @@
 #![allow(clippy::type_complexity)]
 
 use codec::{Decode, Encode};
-use frame_support::traits::Get;
+use frame_support::{traits::Get, transactional};
 use frame_system::{
 	self,
 	offchain::{AppCrypto, CreateSignedTransaction, SendUnsignedTransaction, SignedPayload, Signer, SigningTypes},
 };
 use sp_core::crypto::KeyTypeId;
 use sp_runtime::{
-	offchain::{storage::{MutateStorageError, StorageRetrievalError, StorageValueRef}},
+	offchain::{http, Duration, storage::StorageValueRef, storage_lock::{StorageLock, Time}},
+	traits::IdentifyAccount,
 	transaction_validity::{InvalidTransaction, TransactionValidity, ValidTransaction},
-	offchain::http,
 	RuntimeDebug,
 };
-use sp_std::{collections::btree_map::BTreeMap, vec::Vec, str, prelude::*};
+use sp_std::{collections::btree_map::BTreeMap, collections::btree_set::BTreeSet, vec::Vec, str, prelude::*};
 mod types;
 use types::*;
 mod utils;
@@ -24,6 +24,7 @@ pub mod trade_provider;
 pub mod best_path_calculator;
 use sp_std::convert::TryInto;
 use scale_info::prelude::{string::String, format};
+use sp_std::iter::Iterator;
 
 #[cfg(test)]
 mod tests;
@@ -33,14 +34,32 @@ mod benchmarking;
 pub mod weights;
 pub use weights::WeightInfo;
 
-/// Key for the next offchain trigger.
-pub const NEXT_OFFCHAIN_TRIGGER_STORAGE: &[u8] = b"aggregator::next_offchain_trigger";
+/// Duration for getting the OCW lock, in millis
+pub const OCW_LOCK_DURATION: u64 = 100;
 
-/// Defines application identifier for crypto keys of this module.
+/// Application identifier for crypto keys of this module
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"aggr");
 
+/// Transaction tag to deduplicate OCW transactions
+pub const TX_TAG: &[u8] = b"aggregator";
+
+/// OCW off-chain lookup
+pub const OCW_WORKER_LOCK: &[u8] = b"aggregator::ocw_lock";
+
+/// Key for the next offchain trigger.
+pub const NEXT_OFFCHAIN_TRIGGER_BLOCK: &[u8] = b"aggregator::next_offchain_trigger_block";
+
 pub trait BestPathCalculator<C: Currency, P: Provider, A: Amount> {
-	fn calc_best_paths(pairs_and_prices: Vec<(ProviderPair<C, P>, A)>) -> Result<BTreeMap<Pair<C>, PricePath<C, P, A>>, CalculatorError>;
+	fn calc_best_paths(pairs_and_prices: &[(ProviderPair<C, P>, A)]) -> Result<BTreeMap<Pair<C>, PricePath<C, P, A>>, CalculatorError>;
+}
+
+/// Amalgamation of different mechanisms for price fetching & trade issuance
+pub trait TradeProvider<C: Currency, P: Provider, A: Amount> {
+	/// Shortcut method to determine if we support this provider
+	fn is_valid_provider(provider: P) -> bool;
+	/// For a given provider, source & target currency, fetch the pair price
+	fn get_price(provider: P, source: C, target: C) -> Result<A, TradeProviderErr<P>>;
+	// fn trade(source: provider: Provider, Cu, target: Cu, amount: u128, cost: Cost) -> Option<Cost>;
 }
 
 #[derive(Debug)]
@@ -55,15 +74,22 @@ impl <P: Provider> From<http::Error> for TradeProviderErr<P> {
     }
 }
 
-pub trait TradeProvider<C: Currency, P: Provider, A: Amount> {
-	fn is_valid_provider(provider: P) -> bool;
-	fn get_price(provider: P, source: C, target: C) -> Result<A, TradeProviderErr<P>>;
-	// fn trade(source: provider: Provider, Cu, target: Cu, amount: u128, cost: Cost) -> Option<Cost>;
+/// Signed payload of unsigned transaction that carries best path changes, nonce and publick key.
+///
+/// Changes map source/target currency to an Option of a best path. If the Option is Some(), price update is requested, if None, removal.
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
+pub struct BestPathChangesPayload<Public, C: Currency, P: Provider, A: Amount> {
+	changes: Vec<(C, C, Option<PricePath<C, P, A>>)>,
+	nonce: u64,
+	public: Public,
 }
 
-/// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrappers.
-/// We can use from supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
-/// the types with this pallet-specific identifier.
+impl<T: SigningTypes, C: Currency, P: Provider, A: Amount> SignedPayload<T> for BestPathChangesPayload<T::Public, C, P, A> {
+	fn public(&self) -> T::Public {
+		self.public.clone()
+	}
+}
+
 pub mod crypto {
 	use super::KEY_TYPE;
 	use sp_core::sr25519::Signature as Sr25519Signature;
@@ -97,70 +123,50 @@ pub mod pallet {
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
 
-	/// Defines the block when next unsigned transaction will be accepted.
-	///
-	/// To prevent spam of unsigned (and unpayed!) transactions on the network,
-	/// we only allow one transaction every `T::UnsignedInterval` blocks.
-	/// This storage entry defines when new transaction is going to be accepted.
+	/// DoubleMap of trading path by source & target currencies
 	#[pallet::storage]
-	//#[pallet::getter(fn next_unsigned_at)]
-	pub(super) type AcceptNextOcwTxAt<T: Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
+	pub(super) type BestPaths<T: Config> = StorageDoubleMap<_, Blake2_128Concat, T::Currency /* source currency */, Blake2_128Concat, T::Currency /*target currency */, PricePath<T::Currency, T::Provider, T::Amount> /* best path */>;
 
-	/// DoubleMap of source/target currencies => cost by provider
+	/// Map to keep track of source & target currencies we wish to monitor
 	#[pallet::storage]
-	// #[pallet::getter(fn best_path)]  // not using getter only
-	pub(super) type BestPaths<T: Config> = StorageDoubleMap<
-		_,
-		Blake2_128Concat,
-		T::Currency,  // source currency
-		Blake2_128Concat,
-		T::Currency,  // target currency
-		PricePath<T::Currency, T::Provider, T::Amount>, // best path
-	>;
+	pub(super) type MonitoredPairs<T: Config> = StorageMap<_, Blake2_128Concat, ProviderPair<T::Currency, T::Provider>, (), OptionQuery>;  // membership in the map indicates price is to be fetched, Some(()) - existence of the latest price
 
+	/// Map storing whitelisted accounts that are whitelisted to sign the payload of unsigned transactions.
 	#[pallet::storage]
-	// #[pallet::getter(fn best_path)]  // not using getter only
-	pub(super) type MonitoredPairs<T: Config> = StorageMap<
-		_,
-		Blake2_128Concat,
-		ProviderPair<T::Currency, T::Provider>,
-		Option<()>,  // membership in the map indicates price is to be fetched, Some(()) - existence of the latest price
-	>;
+	pub(super) type WhitelistedOffchainAuthorities<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, ()>;
 
-	/// Events for the pallet.
+	/// Nonce used for replay protection of unsigned transactions
+	#[pallet::storage]
+	pub(super) type UnsignedTxNonce<T: Config> = StorageValue<_, u64, ValueQuery>;
+
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Addition/change of a price pair.
-		/// \[source_currency, target_currency, new_cost\]
-		PricePairChanged(T::Currency, T::Currency, T::Amount),
-
-		/// Multiple price changes
+		/// Submission of best prices onchain
 		/// \[{source_currency, target_currency, new_cost, operation}\]
-		MultiplePricePairsChanged(Vec<(T::Currency, T::Currency, T::Amount, Operation)>),
+		BestPricesSubmitted(Vec<(T::Currency, T::Currency, T::Amount, Operation)>),
 
-		/// Removal of a price pair.
-		/// \[source_currency, target_currency\]
-		PricePairRemoved(T::Currency, T::Currency),
-
-		/// Addition/removal of a monitored pair.
+		/// Addition of a monitored currency/provider pair.
 		/// \[source_currency, target_currency, provider\]
-		MonitoredPairAdded(T::Currency, T::Currency, T::Provider),
-
-		/// Addition/removal of a monitored pair.
-		/// \[source_currency, target_currency, provider\]
-		MonitoredPairRemoved(T::Currency, T::Currency, T::Provider),
+		MonitoredPairsSubmitted(Vec<(T::Currency, T::Currency, T::Provider, Operation)>),
 
 		/// Confirmation of a trade.
 		/// \[owner_account_id, source_currency, target_currency, cost, source_amount, target_amount\]
 		TradePerformed(T::AccountId, T::Currency, T::Currency, T::Amount, T::Amount, T::Amount),
+
+		/// Addition of offchain authority account.
+		/// \[account_id\]
+		WhitelistedOffchainAuthorityAdded(T::AccountId),
 	}
 
-	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
+		/// Indicates currency/provider pair not found
 		PricePairNotFoundError,
+		/// Indicates provider is not catered for
 		UnknownTradeProviderError,
+		/// Indicates stale unsigned transaction, possibly due to replay attack
+		StaleUnsignedTxError,
 	}
 	
 	/// This pallet's configuration trait
@@ -175,10 +181,13 @@ pub mod pallet {
 		/// The overarching dispatch call type.
 		type Call: From<Call<Self>>;
 
+		/// Currency type
 		type Currency: Currency;
 
+		/// Provider type
 		type Provider: Provider;
 
+		/// Type indicating amounts: price, cost, balance
 		type Amount: Amount;
 
 		/// Dynamic implementation of the best path calculator
@@ -187,32 +196,20 @@ pub mod pallet {
 		/// Dynamic implementation of the trade provider
 		type TradeProvider: TradeProvider<Self::Currency, Self::Provider, Self::Amount>;
 
+		/// Benchmarking weight type
 		type WeightInfo: WeightInfo;
 
 		// Configuration parameters
 
-		/// Frequency of offchain worker trigger.
-		///
-		/// To avoid sending too many offchain worker instantiations, we only attempt to trigger one
-		/// every `OffchainTriggerDelay` blocks. We use Local Storage to coordinate
-		/// sending between distinct runs.
+		/// Delay between successful submissions of OCW best prices, used for rate limiting.
 		#[pallet::constant]
-		type OffchainTriggerFreq: Get<Self::BlockNumber>;
+		type OffchainTriggerDelay: Get<Self::BlockNumber>;
 
-		/// Frequency of accepted unsigned (OCW) transactions.
-		///
-		/// This ensures that we only accept unsigned transactions once every `UnsignedTxAcceptFreq` blocks.
-		#[pallet::constant]
-		type UnsignedTxAcceptFreq: Get<Self::BlockNumber>;
-
-		/// A configuration for base priority of unsigned transactions.
-		///
-		/// This is exposed so that it can be tuned for particular runtime, when
-		/// multiple pallets send unsigned transactions.
+		/// Priority of unsigned transactions, parametrizable for this pallet
 		#[pallet::constant]
 		type UnsignedPriority: Get<TransactionPriority>;
 
-		/// Tolerance of price change in best paths, expressed in 1/1,000,000, to prevent triggering extrinsics for minor price changes
+		/// Tolerance of price change in best paths, expressed in 1/1,000,000, filters out insignificant price changes
 		#[pallet::constant]
 		type PriceChangeTolerance: Get<u32>;
 	}
@@ -223,38 +220,65 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		/// Offchain Worker entry point, keeping functionality to minimum and delegating to `impl` block.
+		/// Off-chain Worker entry point.
+		///
+		/// First checks whether can act upon this block, if so, attempts to obtain the lock, if successful, fetches and updates the best paths.
+		/// Once done, bumps the next trigger block storage by the delay amount, and lock is released.
 		fn offchain_worker(block_number: T::BlockNumber) {
 			if Self::should_trigger_offchain(block_number) {
-				if let Err(e) = Self::fetch_prices_and_update_best_paths(block_number) {
-					log::error!("OCW price fetching error: {}", e);
-				}
+				// obtain the OCW lock
+				let lock_expiration = Duration::from_millis(OCW_LOCK_DURATION);
+				let mut lock = StorageLock::<'static, Time>::with_deadline(OCW_WORKER_LOCK, lock_expiration);
+
+				match lock.try_lock() {
+					Ok(_guard) => {
+						if let Err(e) = Self::fetch_prices_and_update_best_paths() {
+							log::error!("OCW price fetching error: {}", e);
+						}
+						// bump the offchain trigger block
+						let next_trigger = block_number + T::OffchainTriggerDelay::get();
+						StorageValueRef::persistent(NEXT_OFFCHAIN_TRIGGER_BLOCK).set(&next_trigger);
+					},
+					Err(e) => log::warn!("OCW failed to obtain OCW lock due to {:?}", e)
+				};
 			}
 		}
 	}
 
-	/// A public part of the pallet.
+	/// Aggregator extrinsic API.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(100)]
+
+		/// Submit best path prices calculated offchain.
+		///
+		/// Adds/removes best price paths, as per `best_path_change_payload.changes`.
+		/// Dedups by provider_pair, picking last operation only.
+		/// This call should only get through once its payload has been validated to be signed by a whitelisted authority.
+		/// Uses nonce for replay protection, bumping it upon the success.
+		/// Issues an event listing all supplied changes.
+		#[pallet::weight(T::WeightInfo::submit_monitored_pairs(best_path_change_payload.changes.len()))]
+		#[transactional]
 		pub fn ocw_submit_best_paths_changes(
 			origin: OriginFor<T>,
-			best_path_change_payload: BestPathChangesPayload<T::Public, T::BlockNumber, T::Currency, T::Provider, T::Amount>,  // FIXME: need Box<dyn PairChange>
-			_signature: T::Signature,      // FIXME: KS: what is the signature, why needed?
-		) -> DispatchResultWithPostInfo {  // FIXME: KS: DispatchResultWithPostInfo to reduce the fee? how?
+			best_path_change_payload: BestPathChangesPayload<T::Public, T::Currency, T::Provider, T::Amount>,
+			_signature: T::Signature,
+		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
+			let current_nonce = <UnsignedTxNonce<T>>::get();
+			ensure!(current_nonce == best_path_change_payload.nonce, Error::<T>::StaleUnsignedTxError);
 
 			let mut event_payload = vec![];
-			for (ref source, ref target, ref new_path) in best_path_change_payload.changes {
+			for (ref source, ref target, ref mut new_path) in best_path_change_payload.changes {
 				BestPaths::<T>::mutate_exists(
 					source,
 					target,
 					|old_path| {
-						match new_path {
+						match new_path.take() {
 							Some(path) => {
-								*old_path = Some(path.clone());  // insert/replace
-								log::info!("Onchain: adding/changing price onchain for {} -> {}: {:?}", source.to_str(), target.to_str(), path.total_cost);
-								event_payload.push((source.clone(), target.clone(), path.total_cost, Operation::Add));
+								let total_cost = path.total_cost;
+								*old_path = Some(path);
+								log::info!("Onchain: adding/changing price onchain for {} -> {}: {:?}", source.to_str(), target.to_str(), total_cost);
+								event_payload.push((source.clone(), target.clone(), total_cost, Operation::Add));
 							}
 							None => if old_path.take().is_some() {
 								log::info!("Onchain: removing price onchain: {} -> {}", source.to_str(), target.to_str());
@@ -265,87 +289,82 @@ pub mod pallet {
 				);
 			}
 
-			Self::deposit_event(Event::MultiplePricePairsChanged(event_payload));
-
-			// now increment the block number at which we expect next unsigned transaction.
-			let current_block = <frame_system::Pallet<T>>::block_number();
-			<AcceptNextOcwTxAt<T>>::put(current_block + T::UnsignedTxAcceptFreq::get());
-
+			<UnsignedTxNonce<T>>::set(current_nonce + 1);
+			// only issue event if mods were made
+			if !event_payload.is_empty() {
+				Self::deposit_event(Event::BestPricesSubmitted(event_payload));
+			}
 			Ok(Pays::No.into())
-		}
+	}
 
-		/// Add price pair
-		#[pallet::weight(
-			T::WeightInfo::add_price_pair_nonexisting().max(T::WeightInfo::add_price_pair_existing())
-        )]
-		pub fn add_price_pair(
+		/// Submit monitored price pair adds/deletes.
+		///
+		/// Root operation, requires sudo.
+		/// Validates that all operations are mapped to a valid provider, then each operation is added/deleted to monitored pairs map.
+		/// Operations to be added are upserted, operations to be deleted are removed if exist, skipped otherwise.
+		#[pallet::weight(T::WeightInfo::submit_monitored_pairs(operations.len()))]
+		#[transactional]
+		pub fn submit_monitored_pairs(
 			origin: OriginFor<T>,
-			source: T::Currency, target: T::Currency, provider: T::Provider) -> DispatchResult {
-			ensure_root(origin)?;
-			ensure!(T::TradeProvider::is_valid_provider(provider.clone()), Error::<T>::UnknownTradeProviderError);
-
-			let pair = ProviderPair{ pair: Pair{source: source.clone(), target: target.clone()}, provider: provider.clone() };
-			<MonitoredPairs<T>>::try_mutate_exists(pair, |prices_opt| -> DispatchResult {
-				if prices_opt.is_none() {
-					*prices_opt = Some(None);
-					Self::deposit_event(Event::MonitoredPairAdded(source, target, provider));
-				}
-				Ok(())
-			})
-		}
-
-		#[pallet::weight(T::WeightInfo::delete_price_pair())]
-		pub fn delete_price_pair(
-			origin: OriginFor<T>,
-			source: T::Currency, target: T::Currency, provider: T::Provider) -> DispatchResult {
-			ensure_root(origin)?;
-			ensure!(T::TradeProvider::is_valid_provider(provider.clone()), Error::<T>::UnknownTradeProviderError);
-
-			let pair = ProviderPair{ pair: Pair{source: source.clone(), target: target.clone()}, provider: provider.clone() };
-			<MonitoredPairs<T>>::try_mutate_exists(pair, |prices_opt| -> DispatchResult {
-				prices_opt.take().ok_or(Error::<T>::PricePairNotFoundError)?;
-				Self::deposit_event(Event::MonitoredPairRemoved(source, target, provider));
-				Ok(())
-			})
-		}
-
-		/// Provided externally, by eg. root user, to inform ocw of additional pairs
-		#[pallet::weight(T::WeightInfo::submit_price_pairs())]
-		#[frame_support::transactional]
-		pub fn submit_price_pairs(
-			origin: OriginFor<T>,
-			pairs: Vec<(T::Currency, T::Currency, T::Provider, Operation)>) -> DispatchResult {
+			operations: Vec<ProviderPairOperation<T::Currency, T::Provider>>) -> DispatchResult {
 			ensure_root(origin)?;
 
-			// first check ALL the pairs exist
-			for (source, target, provider, op) in &pairs {
-				let pair = ProviderPair{ pair: Pair{source: source.clone(), target: target.clone()}, provider: provider.clone() };
+			// first check all the pairs exist
+			for ProviderPairOperation{provider_pair: ProviderPair{provider, ..}, ..} in &operations {
 				ensure!(T::TradeProvider::is_valid_provider(provider.clone()), Error::<T>::UnknownTradeProviderError);
-				if *op == Operation::Del {
-					ensure!(<MonitoredPairs<T>>::contains_key(pair), Error::<T>::PricePairNotFoundError);
-				}
 			}
 
-			// as per above, except with multiples and no error checking (done above)
-			for (source, target, provider, op) in pairs {
+			// dedupe operations, keep latest per provider_pair, preserving order
+			let mut operations2 = vec![];
+			let mut uniques = BTreeSet::new();
+			for op in operations.into_iter().rev() {
+				if uniques.insert(op.provider_pair.clone()) {
+					operations2.push(op);
+				}
+			}
+			let operations = operations2.into_iter().rev();
+
+			// add/delete monitored pairs
+			let mut event_payload = vec![];
+			for ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source, target}, provider}, operation: op} in operations {
 				let pair = ProviderPair{ pair: Pair{source: source.clone(), target: target.clone()}, provider: provider.clone() };
-				<MonitoredPairs<T>>::mutate_exists(pair, |prices_opt| {
+				<MonitoredPairs<T>>::mutate_exists(pair, |exists_indicator| {
 					match op {
-						Operation::Add => if prices_opt.is_none() {
-							*prices_opt = Some(None);
-							Self::deposit_event(Event::MonitoredPairAdded(source, target, provider));
+						Operation::Add => if exists_indicator.is_none() {
+							*exists_indicator = Some(());
+							event_payload.push((source.clone(), target.clone(), provider.clone(), op));
 						},
 						Operation::Del => {
-							prices_opt.take();
-							Self::deposit_event(Event::MonitoredPairRemoved(source, target, provider));
-						},  // no error checking required, should have been dealt with prior
+							if exists_indicator.take().is_some() {
+								event_payload.push((source.clone(), target.clone(), provider.clone(), op));
+							}
+						},
 					}
 				});
+			}
+
+			// only issue event if mods were made
+			if !event_payload.is_empty() {
+				Self::deposit_event(Event::MonitoredPairsSubmitted(event_payload));
 			}
 			Ok(())
 		}
 
-		/// Trade as per available prices.
+		// Add authorities (OCW) that are allowed to submit signed payloads of unsigned transactions
+		#[pallet::weight(T::WeightInfo::add_whitelisted_offchain_authority())]
+		pub fn add_whitelisted_offchain_authority(
+			origin: OriginFor<T>,
+			offchain_authority: T::AccountId) -> DispatchResult {
+			ensure_root(origin)?;
+
+			Self::deposit_event(Event::WhitelistedOffchainAuthorityAdded(offchain_authority.clone()));
+			<WhitelistedOffchainAuthorities<T>>::insert(&offchain_authority, ());
+			Ok(())
+		}
+
+		/// Trade as per available best price paths.
+		/// 
+		/// NOTE: implemented skeleton only, not plugged in TradeProvider.
 		#[pallet::weight(T::WeightInfo::trade())]
 		pub fn trade(
 			origin: OriginFor<T>,
@@ -371,7 +390,7 @@ pub mod pallet {
 	impl<T: Config> ValidateUnsigned for Pallet<T> {
 		type Call = Call<T>;
 
-		/// Validate unsigned call to this module.
+		/// Validate unsigned calls to this module.
 		///
 		/// By default unsigned transactions are disallowed, but implementing the validator
 		/// here we make sure that some particular calls (the ones produced by offchain worker)
@@ -385,33 +404,19 @@ pub mod pallet {
 			{
 				let signature_valid = SignedPayload::<T>::verify::<T::AuthorityId>(payload, signature.clone());
 				if !signature_valid {
+					log::error!("OCW rejected transaction due to invalid signature");
 					return InvalidTransaction::BadProof.into()
 				}
 
-				// reject transactions from the future
-				let current_block = <frame_system::Pallet<T>>::block_number();
-				if current_block < payload.block_number {
-					return InvalidTransaction::Future.into()
-				}
-
-				// Now let's check if the transaction has any chance to succeed.
-				let next_ocw_tx_at = <AcceptNextOcwTxAt<T>>::get();
-				if next_ocw_tx_at > payload.block_number {
-					return InvalidTransaction::Stale.into()
+				let account_id = payload.public.clone().into_account();
+				if !WhitelistedOffchainAuthorities::<T>::contains_key(&account_id) {
+					log::error!("OCW rejected transaction due to signer not on the offchain authority whitelist: {:?}", account_id);
+					return InvalidTransaction::BadProof.into();
 				}
 
 				ValidTransaction::with_tag_prefix("AggregatorWorker")
-					.priority(T::UnsignedPriority::get())  // prioritise on changeset size... FIXME: good strategy?
-					// This transaction does not require anything else to go before into the pool.
-					// In theory we could require `previous_unsigned_at` transaction to go first,
-					// but it's not necessary in our case.
-					//.and_requires()
-					// We set the `provides` tag to be the same as `next_unsigned_at`. This makes
-					// sure only one transaction produced after `next_unsigned_at` will ever
-					// get to the transaction pool and will end up in the block.
-					// We can still have multiple transactions compete for the same "spot",
-					// and the one with higher priority will replace other one in the pool.
-					.and_provides(next_ocw_tx_at)
+					.priority(T::UnsignedPriority::get())
+					.and_provides((<frame_system::Pallet<T>>::block_number(), TX_TAG))
 					.longevity(5)  // transaction is only valid for next 5 blocks. After that it's revalidated by the pool.
 					.propagate(true)
 					.build()
@@ -422,66 +427,44 @@ pub mod pallet {
 	}
 }
 
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
-pub struct BestPathChangesPayload<Public, BlockNumber, C: Currency, P: Provider, A: Amount> {
-	block_number: BlockNumber,
-	changes: Vec<(C, C, Option<PricePath<C, P, A>>)>,
-	public: Public,
-}
-
-impl<T: SigningTypes, C: Currency, P: Provider, A: Amount> SignedPayload<T> for BestPathChangesPayload<T::Public, T::BlockNumber, C, P, A> {
-	fn public(&self) -> T::Public {
-		self.public.clone()
-	}
-}
-
 impl<T: Config> Pallet<T> {
+	/// Determine if can trigger OCW based on the next offchain trigger block delay mechanism
 	fn should_trigger_offchain(block_number: T::BlockNumber) -> bool {
-		const RECENTLY_SENT: () = ();
-		let next_offchain_trigger = StorageValueRef::persistent(NEXT_OFFCHAIN_TRIGGER_STORAGE);
-		// FIXME: using StorageValueRef as a lock, should use StorageLock instead?
-		let res = next_offchain_trigger.mutate(|val: Result<Option<T::BlockNumber>, StorageRetrievalError>| {
-			match val {
-				// Have we triggered recent enough?
-				Ok(Some(next_trigger)) if block_number < next_trigger => Err(RECENTLY_SENT),
-				// In every other case we attempt to acquire the lock and trigger offchain worker
-				_ => Ok(block_number + T::OffchainTriggerFreq::get()),
-			}
-		});
-		match res {
-			// The value has been set correctly, which means we can safely send a transaction now.
-			Ok(_) =>{
-				log::debug!("Offchain lock acquired!");
+		match StorageValueRef::persistent(NEXT_OFFCHAIN_TRIGGER_BLOCK).get::<T::BlockNumber>() {
+			Ok(Some(next_offchain_trigger)) if block_number >= next_offchain_trigger => {
+				log::info!("Offchain trigger block encountered!");
 				true
 			}
-			Err(MutateStorageError::ValueFunctionFailed(RECENTLY_SENT)) => {
-				log::debug!("Offchain lock acquire attempted too soon");
+			Ok(Some(_)) => {
+				log::info!("Offchain trigger attempted too soon!");
 				false
 			}
-			Err(MutateStorageError::ConcurrentModification(_)) => {
-				log::debug!("Offchain lock unavailable, will not trigger");
+			Ok(None) => {
+				log::info!("Offchain trigger block initiated!");
+				true
+			}
+			_ => {
+				log::info!("Offchain trigger not readable!");
 				false
 			}
 		}
 	}
 
 	/// A helper function to fetch the price, sign payload and send an unsigned transaction
-	fn fetch_prices_and_update_best_paths(
-		block_number: T::BlockNumber,
-	) -> Result<(), String> {
+	fn fetch_prices_and_update_best_paths() -> Result<(), String> {
 		let fetched_pairs = <MonitoredPairs<T>>::iter_keys()
-			.map(|pp| (pp.clone(), T::TradeProvider::get_price(pp.provider, pp.pair.source, pp.pair.target)))
-			.filter(|(_, provider_opt)| provider_opt.is_ok())
-			.filter(|(_, res)| res.is_ok())
-			.map(|(p, res)| (p, res.unwrap()))
-			.collect::<Vec<(ProviderPair<_, _>, _)>>();
+			.filter_map(|pp| {
+				let pp2 = pp.clone();
+				T::TradeProvider::get_price(pp2.provider, pp2.pair.source, pp2.pair.target).ok().map(move |res| (pp, res))
+			})
+			.collect::<Vec<(_, _)>>();
 
 		if fetched_pairs.is_empty() {
 			log::debug!("Offchain: no price pairs to update!");
 			return Ok(())
 		}
 
-		let new_best_paths: BTreeMap<Pair<_>, PricePath<_, _, _>> = T::BestPathCalculator::calc_best_paths(fetched_pairs).map_err(|e| format!("Failed to calculate best prices due to {:?}", e))?;  // FIXME: provide reason
+		let new_best_paths: BTreeMap<Pair<_>, PricePath<_, _, _>> = T::BestPathCalculator::calc_best_paths(&fetched_pairs).map_err(|e| format!("Failed to calculate best prices due to {:?}", e))?;
 
 		// select the best path differences
 		// - elements changed at all and outside of acceptable tolerance
@@ -493,40 +476,37 @@ impl<T: Config> Pallet<T> {
 			let pair = Pair{ source: source.clone(), target: target.clone() };
 			match new_best_paths.get(&pair) {
 				Some(new_price_path) => {
-					let old_total_cost = TryInto::<u128>::try_into(old_price_path.total_cost).ok().unwrap();  // FIXME: better way to convert?
-					let new_total_cost = TryInto::<u128>::try_into(new_price_path.total_cost).ok().unwrap();
+					let old_total_cost: u128 = old_price_path.total_cost.try_into().map_err(|_| "failed to convert old_price_path.total_cost")?;
+					let new_total_cost: u128 = new_price_path.total_cost.try_into().map_err(|_| "failed to convert new_price_path.total_cost")?;
 					if breaches_tolerance(old_total_cost, new_total_cost, tolerance) {
-						log::info!("Offchain: adding price change for {:?} -> {:?} in excess of tolerance: {:?}: {:?} -> {:?}", pair.source.to_str(), pair.target.to_str(), tolerance, old_total_cost, new_total_cost);
+						log::debug!("Offchain: adding price change for {:?} -> {:?} in excess of tolerance: {:?}: {:?} -> {:?}", pair.source.to_str(), pair.target.to_str(), tolerance, old_total_cost, new_total_cost);
 						changes.push((source, target, Some(new_price_path.clone())));
 					} else {
-						log::info!("Offchain: skipping price change for {:?} -> {:?} within tolerance of {:?}: {:?} -> {:?}", pair.source.to_str(), pair.target.to_str(), tolerance, old_total_cost, new_total_cost);
+						log::debug!("Offchain: skipping price change for {:?} -> {:?} within tolerance of {:?}: {:?} -> {:?}", pair.source.to_str(), pair.target.to_str(), tolerance, old_total_cost, new_total_cost);
 					}
 				}
-				None => log::info!("Offchain: no price fetched for {:?} -> {:?}", pair.source.to_str(), pair.target.to_str()),
+				None => log::debug!("Offchain: no price fetched for {:?} -> {:?}", pair.source.to_str(), pair.target.to_str()),
 			}
 		}
 		for (Pair{source, target}, new_price_path) in new_best_paths.into_iter() {
 			if ! BestPaths::<T>::contains_key(&source, &target) {
-				log::info!("Offchain: adding new price: for {:?} -> {:?}: {:?}", source.to_str(), target.to_str(), &new_price_path.total_cost);
+				log::debug!("Offchain: adding new price: for {:?} -> {:?}: {:?}", source.to_str(), target.to_str(), &new_price_path.total_cost);
 				changes.push((source, target, Some(new_price_path.clone())))
-			// } else {
-			// 	log::info!("Skipping existing price for {:?} -> {:?}: {:?}", source.as_str(), target.as_str(), &new_price_path);
 			}
 		}
 
 		if changes.is_empty() {
 			log::info!("Offchain: detected no price changes that breached tolerance level")
 		} else {
-			// -- Sign using any account
-			let (_, result) = Signer::<T, T::AuthorityId>::any_account()  // vs all_accounts()?
+			let (_, result) = Signer::<T, T::AuthorityId>::any_account()
 				.send_unsigned_transaction(
-					|account| BestPathChangesPayload { block_number, changes: changes.clone(), public: account.public.clone() },
+					|account| BestPathChangesPayload {changes: changes.clone(), nonce: <UnsignedTxNonce<T>>::get(), public: account.public.clone() },
 					|payload, signature| Call::ocw_submit_best_paths_changes {
 						best_path_change_payload: payload,
 						signature,
 					},
 				)
-				.ok_or("No local accounts accounts available.")?;
+				.ok_or("No local accounts accounts available")?;
 			result.map_err(|()| "Unable to submit transaction")?;
 
 			log::info!("Offchain: updated best paths!");

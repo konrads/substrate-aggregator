@@ -73,8 +73,7 @@ In flux, to-be-described...
 In flux, to-be-described...
 
 ### Constants
-- `OffchainTriggerFreq` - determines OCW trigger frequency
-- `UnsignedTxAcceptFreq` - determines unsigned transaction receipt frequency
+- `OffchainTriggerDelay` - rate limits OCW trigger
 - `UnsignedPriority` - sets unsigned transaction priority (to play nicely with other pallets)
 - `PriceChangeTolerance` - sets acceptable price change tolerance, if not breached, on-chain prices aren't updated
 
@@ -94,16 +93,24 @@ Go to [https://polkadot.js.org/apps/#/explorer](https://polkadot.js.org/apps/#/e
 
 <img src="/docs/img/switch-network.png" alt="Switch to local node" width="30%">
 
-Go to extrinsic menu to submit currency-provider pairs:
+Add offchain authority (potentially temporary step, might be automated). Click on `+ Add Account`, enter the mnemonic `clip organ olive upper oak void inject side suit toilet stick narrow`:
+
+<img src="/docs/img/add-offchain-authority-account.png" alt="Add offchain authority account" width="70%">
+
+Proceed by clicking `Next`, name the newly created to eg. `OCW_ADMIN`, click `Next`, `Save`.
+
+Go to extrinsic menu:
 
 <img src="/docs/img/extrinsic-menu.png" alt="Go to extrinsic menu" width="40%">
 
-Notice how adding currency-provider pairs is a sudo call (requires going through `sudo` pallet):
+Add the newly created authority to the whitelist. Note, this is done via sudo call (requires going through `sudo` pallet):
+<img src="/docs/img/add-whitelisted-offchain-authority.png" alt="Add whitelisted offchain authority" width="70%">
 
-<img src="/docs/img/add-BTC-USDT.png" alt="Add BTC-USDT" width="70%">
-<img src="/docs/img/add-DOT-BTC.png" alt="Add DOT-BTC" width="70%">
+Submit monitored currency-provider pairs via a sudo call:
 
-Make sure to submit transaction for each:
+<img src="/docs/img/add-monitored-pairs.png" alt="Add BTC-USDT" width="70%">
+
+Make sure to submit transaction:
 
 <img src="/docs/img/submit-transaction.png" alt="Submit transaction" width="60%">
 
@@ -124,7 +131,7 @@ And validate new trading path for DOT-USDT pair:
 ## Snags/TODOs
 | Stage | Description                                                                                                                                                | Status |
 | ------| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-|   1   | Benchmark weights, including API allowing for extrinsics with unbounded vector parameters                                                                  |   𐄂    |
+|   1   | Benchmark weights, including API allowing for extrinsics with vector parameters                                                                            |   𐄂    |
 |   1   | Consider abstracting Cost (aka Amount) from Balance to allow for more elaborate cost calculations, including transaction fees, slippage, etc               |   𐄂    |
 |   1   | Bootstrap storage to allow for configuration for price pairs per provider (currently needs root origin extrinsic invocations)                              |   𐄂    |
 |   1   | Investigate keys bootstrap (currently done with curl, see above)                                                                                           |   𐄂    |
@@ -135,6 +142,5 @@ And validate new trading path for DOT-USDT pair:
 |   3   | Utilize XCM to plug into a real price/trade provider                                                                                                       |   𐄂    |
 
 ## Outstanding questions
-* Extrinsics with unbounded vector parameters (eg. `ocw_submit_best_paths_changes()`) - good idea? How to benchmark?
+* Extrinsics with unbounded vector parameters need improved benchmarking, accounting for the length of the vector parameter
 * Benchmarking utilizes `--wasm-execution interpreted-i-know-what-i-do` as default `compiled` isn't available...
-* `submit_price_pairs()` allows unbounded vector, which suggests unbounded memory/weight resources. Research switching to a bounded vector data structure?

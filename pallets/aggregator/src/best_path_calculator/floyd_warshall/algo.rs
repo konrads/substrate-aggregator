@@ -75,13 +75,14 @@ pub enum PathCalculationError {
 /// ie. can convert weights x => log2(x), y => log2(y)
 /// Negate the weight for compatibility with shortest_path()
 pub (crate) fn longest_paths_mult(edges: &[Edge]) -> Result<BTreeMap<Pair, Path>, PathCalculationError> {
+    let edges = unique_cheapest_edges(edges, Ordering::Greater);
     // record the original weights
     let weight_map: BTreeMap<(Pair, usize), f64> = edges.iter().map(|e|((e.pair, e.provider), e.cost)).collect();
     // map weights x => log2(x)
     let edges_with_log_weights: Vec<Edge> = edges.iter().map(|e|Edge{cost: -e.cost.log2(), ..*e}).collect() ;
 
     // run longest path algo
-    let res = shortest_paths(&edges_with_log_weights, Ordering::Greater);
+    let res = shortest_paths(&edges_with_log_weights);
 
     // map weights back to x, recalculate total_cost
     res.map(|res_map|{
@@ -96,14 +97,18 @@ pub (crate) fn longest_paths_mult(edges: &[Edge]) -> Result<BTreeMap<Pair, Path>
     })
 }
 
+pub (crate) fn shortest_paths(edges: &[Edge]) -> Result<BTreeMap<Pair, Path>, PathCalculationError> {
+    floyd_warshall_shortest_paths(&unique_cheapest_edges(edges, Ordering::Less))
+}
+
 // Floyd-Warshall shortest path algorithm.
-pub (crate) fn shortest_paths(edges: &[Edge], edge_ordering: Ordering) -> Result<BTreeMap<Pair, Path>, PathCalculationError> {
+// Utilizes simple data structures with range of usize
+fn floyd_warshall_shortest_paths(edges: &[Edge]) -> Result<BTreeMap<Pair, Path>, PathCalculationError> {
     let mut vertices: BTreeSet<usize> = BTreeSet::new();
     let mut edges_by_pair: BTreeMap<Pair, Edge> = BTreeMap::new();
     let mut paths_by_pair: BTreeMap<Pair, Path> = BTreeMap::new();
 
-    let unique_edges = unique_cheapest_edges(edges, edge_ordering);
-    for e in unique_edges.iter() {
+    for e in edges.iter() {
         vertices.insert(e.pair.source);
         vertices.insert(e.pair.target);
         edges_by_pair.insert(Pair{source: e.pair.source, target: e.pair.target}, *e);
@@ -112,8 +117,8 @@ pub (crate) fn shortest_paths(edges: &[Edge], edge_ordering: Ordering) -> Result
 
     let mut matrix: BTreeMap<Pair, Path> = BTreeMap::new();
     // initial setup based on edges
-    for v in vertices.iter().cloned() {
-        matrix.insert(Pair{source: v, target: v}, Path{total_cost: 0.0, edges: vec![]});
+    for v in vertices.iter() {
+        matrix.insert(Pair{source: *v, target: *v}, Path{total_cost: 0.0, edges: vec![]});
     }
     for e in edges.iter() {
         matrix.insert(Pair{source: e.pair.source, target: e.pair.target}, Path{total_cost: e.cost, edges: vec![*e]});
@@ -121,19 +126,18 @@ pub (crate) fn shortest_paths(edges: &[Edge], edge_ordering: Ordering) -> Result
 
     // recalculate the matrix as per: https://youtu.be/oNI0rf2P9gE?t=817
     // A[i,j] = min(A[i,j], A[i,k] + A[k,j])
-    for k in vertices.iter().cloned() {
-        // let mut encountered_relaxation = false;
-        for i in vertices.iter().cloned() {
-            for j in vertices.iter().cloned() {
-                let ij_cost = match matrix.get(&Pair{source: i, target: j}) {
+    for k in vertices.iter() {
+        for i in vertices.iter() {
+            for j in vertices.iter() {
+                let ij_cost = match matrix.get(&Pair{source: *i, target: *j}) {
                     Some(ij) => ij.total_cost,
                     None           => f64::MAX  // suggests infinite cost
                 };
-                let (ik_cost, ik_edges) = match matrix.get(&Pair{source: i, target: k}) {
+                let (ik_cost, ik_edges) = match matrix.get(&Pair{source: *i, target: *k}) {
                     Some(ik) => (ik.total_cost, ik.edges.clone()),
                     None           => (f64::MAX, vec![])  // suggests infinite cost
                 };
-                let (kj_cost, kj_edges) = match matrix.get(&Pair{source: k, target: j}) {
+                let (kj_cost, kj_edges) = match matrix.get(&Pair{source: *k, target: *j}) {
                     Some(kj) => (kj.total_cost, kj.edges.clone()),
                     None           => (f64::MAX, vec![])  // suggests infinite cost
                 };
@@ -141,18 +145,14 @@ pub (crate) fn shortest_paths(edges: &[Edge], edge_ordering: Ordering) -> Result
                 if ik_cost + kj_cost != f64::MAX && ij_cost > ik_cost + kj_cost {
                     let mut new_ij_edges = ik_edges;
                     new_ij_edges.extend(kj_edges);
-                    matrix.insert(Pair{source: i, target: j},Path{total_cost: ik_cost + kj_cost, edges: new_ij_edges});
-                    //encountered_relaxation = true;
+                    matrix.insert(Pair{source: *i, target: *j},Path{total_cost: ik_cost + kj_cost, edges: new_ij_edges});
                 }
             }
         }
-        // if !encountered_relaxation {
-        //     break
-        // }
     }
 
     // check for negative cycles
-    for i in vertices.iter().cloned() {
+    for i in vertices {
         let contains_negative_cycle = matrix.get(&Pair{source: i, target: i}).unwrap().total_cost < 0.0;
         if contains_negative_cycle {
             return Err(PathCalculationError::NegativeCyclesError)
@@ -251,7 +251,7 @@ mod tests {
 
             Edge{pair: Pair{source: 3, target: 0}, provider: 1, cost: 2.0},
         ];
-        let res = shortest_paths(&edges, Ordering::Less).unwrap();
+        let res = shortest_paths(&edges).unwrap();
         let costs = (0_usize..=3).map(|source|
             (0_usize..=3).map(|target|
                 res.get(&Pair{source, target}).map(|p|p.total_cost)
@@ -286,7 +286,7 @@ mod tests {
 
             Edge{pair: Pair{source: 3, target: 0}, provider: 1, cost: 2.0},
         ];
-        assert!(shortest_paths(&edges, Ordering::Less).is_err());
+        assert!(shortest_paths(&edges).is_err());
     }
 
     #[test]

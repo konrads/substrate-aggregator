@@ -59,4 +59,8 @@ benchmark:
 	@echo FIXME: failed to default to --wasm-execution compiled, using instead --wasm-execution interpreted-i-know-what-i-do...
 	cargo run --manifest-path node/Cargo.toml --features runtime-benchmarks -- benchmark --extrinsic '*' --pallet pallet_aggregator --wasm-execution interpreted-i-know-what-i-do --output ./pallets/aggregator/src/weights.rs  --template=frame-weight-template.hbs
 
+expand:
+	cargo install cargo-expand
+	SKIP_WASM_BUILD= cargo expand -p pallet-aggregator > pallets/aggregator/src/aggregator_expanded.rs
+
 .PHONY: all

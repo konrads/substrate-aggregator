@@ -44,6 +44,12 @@ pub struct ProviderPair<C: Currency, P: Provider> {
     pub provider: P,
 }
 
+#[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub struct ProviderPairOperation<C: Currency, P: Provider> {
+    pub provider_pair: ProviderPair<C, P>,
+    pub operation: Operation,
+}
+
 /// Path for every ProviderPair. Consists of `hops` and overall cost
 #[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub struct PricePath<C: Currency, P: Provider, A: Amount> {
