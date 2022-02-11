@@ -73,8 +73,7 @@ In flux, to-be-described...
 In flux, to-be-described...
 
 ### Constants
-- `OffchainTriggerFreq` - determines OCW trigger frequency
-- `UnsignedTxAcceptFreq` - determines unsigned transaction receipt frequency
+- `OffchainTriggerDelay` - rate limits OCW trigger
 - `UnsignedPriority` - sets unsigned transaction priority (to play nicely with other pallets)
 - `PriceChangeTolerance` - sets acceptable price change tolerance, if not breached, on-chain prices aren't updated
 
