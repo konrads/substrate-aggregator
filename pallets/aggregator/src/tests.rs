@@ -119,6 +119,7 @@ where
 
 parameter_types! {
 	pub const OffchainTriggerDelay: u64 = 1;
+	pub const MaxTxPoolStayTime: u64 = 1;
 	pub const UnsignedPriority: u64 = 1 << 20;
     pub const PriceChangeTolerance: u32 = 1;
 }
@@ -129,6 +130,7 @@ impl Config for Test {
 	type Call = Call;
     // aggregator specific
 	type OffchainTriggerDelay = OffchainTriggerDelay;
+	type MaxTxPoolStayTime = MaxTxPoolStayTime;
 	type UnsignedPriority = UnsignedPriority;
     type PriceChangeTolerance = PriceChangeTolerance;
     type BestPathCalculator = best_path_calculator::noop_calculator::NoBestPathCalculator;
@@ -269,6 +271,7 @@ fn test_ocw_submit_best_paths_changes() {
 	let (t, _, _, public_key) = &mut new_test_ext_with_keystore();
 	let payload = BestPathChangesPayload {
 		nonce: 0,
+		block_number: 1,
 		changes: vec![(BTC_CURRENCY.to_vec(), USDT_CURRENCY.to_vec(), Some(PricePath{total_cost: 50000, steps: vec![]}))],
 		public: <Test as SigningTypes>::Public::from(*public_key),
 	};
@@ -278,6 +281,7 @@ fn test_ocw_submit_best_paths_changes() {
 		let signature = 
 			<BestPathChangesPayload<
 				<Test as SigningTypes>::Public,
+				<Test as frame_system::Config>::BlockNumber,
 				<Test as Config>::Currency,
 				<Test as Config>::Provider,
 				<Test as Config>::Amount,
@@ -292,6 +296,7 @@ fn test_ocw_submit_best_paths_changes() {
 		let signature = 
 			<BestPathChangesPayload<
 				<Test as SigningTypes>::Public,
+				<Test as frame_system::Config>::BlockNumber,
 				<Test as Config>::Currency,
 				<Test as Config>::Provider,
 				<Test as Config>::Amount,
@@ -305,6 +310,7 @@ fn test_fetch_prices_and_update_best_paths() {
 	let (t, _, pool_state, public_key) = &mut new_test_ext_with_keystore();
 	let payload = BestPathChangesPayload {
 		nonce: 0,
+		block_number: 1,
 		changes: vec![(BTC_CURRENCY.to_vec(), USDT_CURRENCY.to_vec(), Some(PricePath{total_cost: 50000, steps: vec![]}))],
 		public: <Test as SigningTypes>::Public::from(*public_key),
 	};
@@ -315,7 +321,7 @@ fn test_fetch_prices_and_update_best_paths() {
 			ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()}, 
 			());
 
-		assert!(Fixture::fetch_prices_and_update_best_paths().is_ok());
+		assert!(Fixture::fetch_prices_and_update_best_paths(1).is_ok());
 		let tx = pool_state.write().transactions.pop().unwrap();
         assert!(pool_state.read().transactions.is_empty());
         let decoded_tx = Extrinsic::decode(&mut &*tx).unwrap();
@@ -330,6 +336,7 @@ fn test_fetch_prices_and_update_best_paths() {
 			let signature_valid =
 				<BestPathChangesPayload<
 					<Test as SigningTypes>::Public,
+					<Test as frame_system::Config>::BlockNumber,
 					<Test as Config>::Currency,
 					<Test as Config>::Provider,
 					<Test as Config>::Amount,
@@ -346,7 +353,7 @@ fn test_fetch_prices_and_update_best_paths() {
 			ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: BOGUS_PROVIDER.to_vec()}, 
 			());
 
-		assert!(Fixture::fetch_prices_and_update_best_paths().is_ok());
+		assert!(Fixture::fetch_prices_and_update_best_paths(1).is_ok());
 		assert!(pool_state.write().transactions.is_empty());
 	});
 }

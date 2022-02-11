@@ -78,13 +78,14 @@ impl <P: Provider> From<http::Error> for TradeProviderErr<P> {
 ///
 /// Changes map source/target currency to an Option of a best path. If the Option is Some(), price update is requested, if None, removal.
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
-pub struct BestPathChangesPayload<Public, C: Currency, P: Provider, A: Amount> {
+pub struct BestPathChangesPayload<Public, BlockNumber, C: Currency, P: Provider, A: Amount> {
 	changes: Vec<(C, C, Option<PricePath<C, P, A>>)>,
 	nonce: u64,
+	block_number: BlockNumber,
 	public: Public,
 }
 
-impl<T: SigningTypes, C: Currency, P: Provider, A: Amount> SignedPayload<T> for BestPathChangesPayload<T::Public, C, P, A> {
+impl<T: SigningTypes, C: Currency, P: Provider, A: Amount> SignedPayload<T> for BestPathChangesPayload<T::Public, T::BlockNumber, C, P, A> {
 	fn public(&self) -> T::Public {
 		self.public.clone()
 	}
@@ -205,6 +206,10 @@ pub mod pallet {
 		#[pallet::constant]
 		type OffchainTriggerDelay: Get<Self::BlockNumber>;
 
+		/// How long we allow unsigned transaction to remain in the pool before deemed Stale?
+		#[pallet::constant]
+		type MaxTxPoolStayTime: Get<Self::BlockNumber>;
+
 		/// Priority of unsigned transactions, parametrizable for this pallet
 		#[pallet::constant]
 		type UnsignedPriority: Get<TransactionPriority>;
@@ -232,7 +237,7 @@ pub mod pallet {
 
 				match lock.try_lock() {
 					Ok(_guard) => {
-						if let Err(e) = Self::fetch_prices_and_update_best_paths() {
+						if let Err(e) = Self::fetch_prices_and_update_best_paths(block_number) {
 							log::error!("OCW price fetching error: {}", e);
 						}
 						// bump the offchain trigger block
@@ -260,7 +265,7 @@ pub mod pallet {
 		#[transactional]
 		pub fn ocw_submit_best_paths_changes(
 			origin: OriginFor<T>,
-			best_path_change_payload: BestPathChangesPayload<T::Public, T::Currency, T::Provider, T::Amount>,
+			best_path_change_payload: BestPathChangesPayload<T::Public, T::BlockNumber, T::Currency, T::Provider, T::Amount>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
@@ -408,6 +413,12 @@ pub mod pallet {
 					return InvalidTransaction::BadProof.into()
 				}
 
+				let current_block = <frame_system::Pallet<T>>::block_number();
+				if payload.block_number + T::MaxTxPoolStayTime::get() < current_block {
+					// transaction was in pool for too long
+					return InvalidTransaction::Stale.into();
+				}
+
 				let account_id = payload.public.clone().into_account();
 				if !WhitelistedOffchainAuthorities::<T>::contains_key(&account_id) {
 					log::error!("OCW rejected transaction due to signer not on the offchain authority whitelist: {:?}", account_id);
@@ -416,7 +427,7 @@ pub mod pallet {
 
 				ValidTransaction::with_tag_prefix("AggregatorWorker")
 					.priority(T::UnsignedPriority::get())
-					.and_provides((<frame_system::Pallet<T>>::block_number(), TX_TAG))
+					.and_provides((TX_TAG, current_block))
 					.longevity(5)  // transaction is only valid for next 5 blocks. After that it's revalidated by the pool.
 					.propagate(true)
 					.build()
@@ -451,7 +462,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// A helper function to fetch the price, sign payload and send an unsigned transaction
-	fn fetch_prices_and_update_best_paths() -> Result<(), String> {
+	fn fetch_prices_and_update_best_paths(block_number: T::BlockNumber) -> Result<(), String> {
 		let fetched_pairs = <MonitoredPairs<T>>::iter_keys()
 			.filter_map(|pp| {
 				let pp2 = pp.clone();
@@ -500,7 +511,7 @@ impl<T: Config> Pallet<T> {
 		} else {
 			let (_, result) = Signer::<T, T::AuthorityId>::any_account()
 				.send_unsigned_transaction(
-					|account| BestPathChangesPayload {changes: changes.clone(), nonce: <UnsignedTxNonce<T>>::get(), public: account.public.clone() },
+					|account| BestPathChangesPayload {changes: changes.clone(), nonce: <UnsignedTxNonce<T>>::get(), block_number, public: account.public.clone() },
 					|payload, signature| Call::ocw_submit_best_paths_changes {
 						best_path_change_payload: payload,
 						signature,

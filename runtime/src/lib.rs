@@ -282,6 +282,7 @@ pub type SignedPayload = generic::SignedPayload<Call, SignedExtra>;
 // samples taken from https://github.com/paritytech/substrate/blob/master/frame/example-offchain-worker/src/tests.rs#L118
 parameter_types! {
 	pub const OffchainTriggerDelay: BlockNumber = 3;
+	pub const MaxTxPoolStayTime: BlockNumber = 3;
 	pub const UnsignedPriority: TransactionPriority = 1 << 20;
 	pub const PriceChangeTolerance: u32 = 1;
 }
@@ -291,6 +292,7 @@ impl pallet_aggregator::Config for Runtime {
 	type Event = Event;
 	type Call = Call;
 	type OffchainTriggerDelay = OffchainTriggerDelay;
+	type MaxTxPoolStayTime = MaxTxPoolStayTime;
 	type UnsignedPriority = UnsignedPriority;
 	type PriceChangeTolerance = PriceChangeTolerance;
 	type BestPathCalculator = pallet_aggregator::best_path_calculator::floyd_warshall::calculator::FloydWarshallCalculator;
