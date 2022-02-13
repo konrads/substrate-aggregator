@@ -22,9 +22,8 @@ use utils::*;
 pub mod heap;
 pub mod trade_provider;
 pub mod best_path_calculator;
-use sp_std::convert::TryInto;
+use sp_std::{convert::TryInto, iter::Iterator};
 use scale_info::prelude::{string::String, format};
-use sp_std::iter::Iterator;
 
 #[cfg(test)]
 mod tests;
@@ -56,9 +55,9 @@ pub trait BestPathCalculator<C: Currency, P: Provider, A: Amount> {
 /// Amalgamation of different mechanisms for price fetching & trade issuance
 pub trait TradeProvider<C: Currency, P: Provider, A: Amount> {
 	/// Shortcut method to determine if we support this provider
-	fn is_valid_provider(provider: P) -> bool;
+	fn is_valid_provider(provider: &P) -> bool;
 	/// For a given provider, source & target currency, fetch the pair price
-	fn get_price(provider: P, source: C, target: C) -> Result<A, TradeProviderErr<P>>;
+	fn get_price(provider: &P, source: &C, target: &C) -> Result<A, TradeProviderErr<P>>;
 	// fn trade(source: provider: Provider, Cu, target: Cu, amount: u128, cost: Cost) -> Option<Cost>;
 }
 
@@ -273,21 +272,21 @@ pub mod pallet {
 			ensure!(current_nonce == best_path_change_payload.nonce, Error::<T>::StaleUnsignedTxError);
 
 			let mut event_payload = vec![];
-			for (ref source, ref target, ref mut new_path) in best_path_change_payload.changes {
+			for (source, target, ref mut new_path) in best_path_change_payload.changes {
 				BestPaths::<T>::mutate_exists(
-					source,
-					target,
+					source.clone(),
+					target.clone(),
 					|old_path| {
 						match new_path.take() {
 							Some(path) => {
 								let total_cost = path.total_cost;
 								*old_path = Some(path);
 								log::info!("Onchain: adding/changing price onchain for {} -> {}: {:?}", source.to_str(), target.to_str(), total_cost);
-								event_payload.push((source.clone(), target.clone(), total_cost, Operation::Add));
+								event_payload.push((source, target, total_cost, Operation::Add));
 							}
 							None => if old_path.take().is_some() {
 								log::info!("Onchain: removing price onchain: {} -> {}", source.to_str(), target.to_str());
-								event_payload.push((source.clone(), target.clone(), T::Amount::default(), Operation::Del));
+								event_payload.push((source, target, T::Amount::default(), Operation::Del));
 							}
 						}
 					}
@@ -316,7 +315,7 @@ pub mod pallet {
 
 			// first check all the pairs exist
 			for ProviderPairOperation{provider_pair: ProviderPair{provider, ..}, ..} in &operations {
-				ensure!(T::TradeProvider::is_valid_provider(provider.clone()), Error::<T>::UnknownTradeProviderError);
+				ensure!(T::TradeProvider::is_valid_provider(&provider), Error::<T>::UnknownTradeProviderError);
 			}
 
 			// dedupe operations, keep latest per provider_pair, preserving order
@@ -331,17 +330,17 @@ pub mod pallet {
 
 			// add/delete monitored pairs
 			let mut event_payload = vec![];
-			for ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source, target}, provider}, operation: op} in operations {
-				let pair = ProviderPair{ pair: Pair{source: source.clone(), target: target.clone()}, provider: provider.clone() };
-				<MonitoredPairs<T>>::mutate_exists(pair, |exists_indicator| {
-					match op {
+			for ProviderPairOperation{provider_pair, operation} in operations {
+				<MonitoredPairs<T>>::mutate_exists(provider_pair.clone(), |exists_indicator| {
+					let ProviderPair { pair: Pair { source, target }, provider } = provider_pair;
+					match operation {
 						Operation::Add => if exists_indicator.is_none() {
 							*exists_indicator = Some(());
-							event_payload.push((source.clone(), target.clone(), provider.clone(), op));
+							event_payload.push((source, target, provider, operation));
 						},
 						Operation::Del => {
 							if exists_indicator.take().is_some() {
-								event_payload.push((source.clone(), target.clone(), provider.clone(), op));
+								event_payload.push((source, target, provider, operation));
 							}
 						},
 					}
@@ -465,8 +464,7 @@ impl<T: Config> Pallet<T> {
 	fn fetch_prices_and_update_best_paths(block_number: T::BlockNumber) -> Result<(), String> {
 		let fetched_pairs = <MonitoredPairs<T>>::iter_keys()
 			.filter_map(|pp| {
-				let pp2 = pp.clone();
-				T::TradeProvider::get_price(pp2.provider, pp2.pair.source, pp2.pair.target).ok().map(move |res| (pp, res))
+				T::TradeProvider::get_price(&pp.provider, &pp.pair.source, &pp.pair.target).ok().map(move |res| (pp, res))
 			})
 			.collect::<Vec<(_, _)>>();
 

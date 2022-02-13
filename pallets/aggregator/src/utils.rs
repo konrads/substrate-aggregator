@@ -5,7 +5,7 @@ use sp_runtime::SaturatedConversion;
 /// Parse the price from the given JSON string using `lite-json`.
 ///
 /// Returns `None` when parsing failed or `Some(price in cents)` when parsing is successful.
-pub fn parse_price(price_str: &str, target_currency: Vec<u8>, scale: u32) -> Option<u128> {
+pub fn parse_price(price_str: &str, target_currency: &[u8], scale: u32) -> Option<u128> {
 	let val = lite_json::parse_json(price_str);
 	let price = match val.ok()? {
 		JsonValue::Object(obj) => {
@@ -54,12 +54,12 @@ mod tests {
     #[test]
     fn test_parse_price() {
         let payload = r#"{"BTC": 45, "USDT": 12.789, "ETH": 89.000001, "SHIBZELDA": 0.00000007978}"#;
-        assert_eq!(Some(12_789_000_000_000_u128), parse_price(payload, b"USDT".to_vec(), 12));  // FIXME: should round up to 1208?
-        assert_eq!(Some(89_000_001_000_000_u128), parse_price(payload, b"ETH".to_vec(), 12));
-        assert_eq!(Some(45_000_000_000_000_u128), parse_price(payload, b"BTC".to_vec(), 12));
-        assert_eq!(Some(            79_780_u128), parse_price(payload, b"SHIBZELDA".to_vec(), 12));
-        assert_eq!(None,            parse_price(r#"{"USDT": abc}"#, b"USDT".to_vec(), 12));
-        assert_eq!(None,            parse_price(r#""USDT": 12"#, b"USDT".to_vec(), 12));
+        assert_eq!(Some(12_789_000_000_000_u128), parse_price(payload, b"USDT", 12));  // FIXME: should round up to 1208?
+        assert_eq!(Some(89_000_001_000_000_u128), parse_price(payload, b"ETH", 12));
+        assert_eq!(Some(45_000_000_000_000_u128), parse_price(payload, b"BTC", 12));
+        assert_eq!(Some(            79_780_u128), parse_price(payload, b"SHIBZELDA", 12));
+        assert_eq!(None,                          parse_price(r#"{"USDT": abc}"#, b"USDT", 12));
+        assert_eq!(None,                          parse_price(r#""USDT": 12"#, b"USDT", 12));
     }
 
     #[test]

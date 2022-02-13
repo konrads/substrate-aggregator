@@ -29,14 +29,14 @@ const BOGUS_CURRENCY: &[u8] = b"__BOGUS_CURRENCY__";
 const BOGUS_PROVIDER: &[u8] = b"__BOGUS_PROVIDER__";
 pub struct MockProvider {}
 impl TradeProvider<Vec<u8>, Vec<u8>, u64> for MockProvider {
-    fn is_valid_provider(provider: Vec<u8>) -> bool {
+    fn is_valid_provider(provider: &Vec<u8>) -> bool {
         provider == MOCK_PROVIDER
     }
 
-	fn get_price(provider: Vec<u8>, source: Vec<u8>, target: Vec<u8>) -> Result<u64, TradeProviderErr<Vec<u8>>> {
+	fn get_price(provider: &Vec<u8>, source: &Vec<u8>, target: &Vec<u8>) -> Result<u64, TradeProviderErr<Vec<u8>>> {
 		match provider {
 			p if p == MOCK_PROVIDER && source == BTC_CURRENCY && target == USDT_CURRENCY => Ok(50_000),
-			unknown => Err(TradeProviderErr::UnknownProviderErr(unknown))
+			unknown => Err(TradeProviderErr::UnknownProviderErr(unknown.clone()))
 		}
 	}
 }

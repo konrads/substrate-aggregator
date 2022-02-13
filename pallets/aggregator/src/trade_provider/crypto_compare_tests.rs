@@ -37,8 +37,8 @@ fn test_get_price() {
     }
 
     t.execute_with(|| {
-        assert_eq!(get_price(b"BTC".to_vec(), b"USD".to_vec(), 12).unwrap(), 50_000_000000000000);
-        assert_eq!(get_price(b"ETH".to_vec(), b"USD".to_vec(), 12).unwrap(),  4_000_000000000000);
-        assert_eq!(get_price(b"BTC".to_vec(), b"ETH".to_vec(), 12).unwrap(), 12_500_000000000000);
+        assert_eq!(get_price(b"BTC", b"USD", 12).unwrap(), 50_000_000000000000);
+        assert_eq!(get_price(b"ETH", b"USD", 12).unwrap(),  4_000_000000000000);
+        assert_eq!(get_price(b"BTC", b"ETH", 12).unwrap(), 12_500_000000000000);
     })
 }
