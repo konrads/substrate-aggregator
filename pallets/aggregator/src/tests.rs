@@ -21,23 +21,15 @@ use sp_runtime::{
 };
 
 
-const MOCK_PROVIDER:  &[u8] = b"mock_provider";
+const MOCK_PROVIDER:  Provider = Provider::CRYPTOCOMPARE;
 const BTC_CURRENCY:   &[u8] = b"BTC";
 const ETH_CURRENCY:   &[u8] = b"ETH";
 const USDT_CURRENCY:  &[u8] = b"USDT";
 const BOGUS_CURRENCY: &[u8] = b"__BOGUS_CURRENCY__";
-const BOGUS_PROVIDER: &[u8] = b"__BOGUS_PROVIDER__";
 pub struct MockProvider {}
-impl TradeProvider<Vec<u8>, Vec<u8>, u64> for MockProvider {
-    fn is_valid_provider(provider: &Vec<u8>) -> bool {
-        provider == MOCK_PROVIDER
-    }
-
-	fn get_price(provider: &Vec<u8>, source: &Vec<u8>, target: &Vec<u8>) -> Result<u64, TradeProviderErr<Vec<u8>>> {
-		match provider {
-			p if p == MOCK_PROVIDER && source == BTC_CURRENCY && target == USDT_CURRENCY => Ok(50_000),
-			unknown => Err(TradeProviderErr::UnknownProviderErr(unknown.clone()))
-		}
+impl TradeProvider<u64> for MockProvider {
+	fn get_price<C: AsRef<[u8]>>(_provider: &Provider, _source: C, _target: C) -> Result<u64, TradeProviderErr> {
+		Ok(50_000)
 	}
 }
 
@@ -85,6 +77,7 @@ impl frame_system::Config for Test {
 	type SystemWeightInfo = ();
 	type SS58Prefix = ();
 	type OnSetCode = ();
+	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
 type Extrinsic = TestXt<Call, ()>;
@@ -136,7 +129,6 @@ impl Config for Test {
     type BestPathCalculator = best_path_calculator::noop_calculator::NoBestPathCalculator;
     type TradeProvider = MockProvider;
     type Currency = Vec<u8>;
-    type Provider = Vec<u8>;
 	type Amount = u64;
 	type WeightInfo = ();
 }
@@ -180,63 +172,63 @@ fn test_submit_monitored_pairs_ok() {
 	new_test_ext().execute_with(|| {
 		// validate deletion of non existent entry - should succeed, but expect no storage change/event
 		assert_ok!(Fixture::submit_monitored_pairs(Origin::root(), vec![
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: BOGUS_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Del},
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: BOGUS_CURRENCY.to_vec()}, provider: MOCK_PROVIDER}, operation: Operation::Del},
 		]));
 		assert_eq!(last_event(), None);
 		assert_eq!(0, MonitoredPairs::<Test>::iter_keys().count());
 
 		// validate additions
 		assert_ok!(Fixture::submit_monitored_pairs(Origin::root(), vec![
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Add},
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},  provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Del},
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},  provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Add},  // deduped, replaces the Del above
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: ETH_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Add},
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER}, operation: Operation::Add},
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},  provider: MOCK_PROVIDER}, operation: Operation::Del},
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},  provider: MOCK_PROVIDER}, operation: Operation::Add},  // deduped, replaces the Del above
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: ETH_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER}, operation: Operation::Add},
 		]));
 		assert_eq!(vec![
-				ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()},
-				ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},  provider: MOCK_PROVIDER.to_vec()},
-				ProviderPair{pair: Pair{source: ETH_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()},
-			].into_iter().collect::<BTreeSet<ProviderPair<Vec<u8>, Vec<u8>>>>(),
-			MonitoredPairs::<Test>::iter_keys().collect::<BTreeSet<ProviderPair<Vec<u8>, Vec<u8>>>>()
+				ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER},
+				ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},  provider: MOCK_PROVIDER},
+				ProviderPair{pair: Pair{source: ETH_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER},
+			].into_iter().collect::<BTreeSet<ProviderPair<Vec<u8>>>>(),
+			MonitoredPairs::<Test>::iter_keys().collect::<BTreeSet<ProviderPair<Vec<u8>>>>()
 		);
 		assert_eq!(last_event(), Some(Event::Fixture(crate::Event::<Test>::MonitoredPairsSubmitted(vec![
-			(BTC_CURRENCY.to_vec(), USDT_CURRENCY.to_vec(), MOCK_PROVIDER.to_vec(), Operation::Add),
-			(BTC_CURRENCY.to_vec(), ETH_CURRENCY.to_vec(),  MOCK_PROVIDER.to_vec(), Operation::Add),
-			(ETH_CURRENCY.to_vec(), USDT_CURRENCY.to_vec(), MOCK_PROVIDER.to_vec(), Operation::Add),
+			(BTC_CURRENCY.to_vec(), USDT_CURRENCY.to_vec(), MOCK_PROVIDER, Operation::Add),
+			(BTC_CURRENCY.to_vec(), ETH_CURRENCY.to_vec(),  MOCK_PROVIDER, Operation::Add),
+			(ETH_CURRENCY.to_vec(), USDT_CURRENCY.to_vec(), MOCK_PROVIDER, Operation::Add),
 		]))));
 
 		// validate deletions
 		assert_ok!(Fixture::submit_monitored_pairs(Origin::root(), vec![
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()},  provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Del},
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},   provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Add},
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},   provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Del},  // deduped, replaces the Add above
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()},  provider: MOCK_PROVIDER}, operation: Operation::Del},
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},   provider: MOCK_PROVIDER}, operation: Operation::Add},
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},   provider: MOCK_PROVIDER}, operation: Operation::Del},  // deduped, replaces the Add above
 			// Note: ETH - USDT still remains
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: ETH_CURRENCY.to_vec(), target: BOGUS_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Del},  // expect it skipped in the event
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: ETH_CURRENCY.to_vec(), target: BOGUS_CURRENCY.to_vec()}, provider: MOCK_PROVIDER}, operation: Operation::Del},  // expect it skipped in the event
 		]));
 		assert_eq!(vec![
-				ProviderPair{pair: Pair{source: ETH_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()},
+				ProviderPair{pair: Pair{source: ETH_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER},
 			],
-			MonitoredPairs::<Test>::iter_keys().collect::<Vec<ProviderPair<Vec<u8>, Vec<u8>>>>()
+			MonitoredPairs::<Test>::iter_keys().collect::<Vec<ProviderPair<Vec<u8>>>>()
 		);
 		assert_eq!(last_event(), Some(Event::Fixture(crate::Event::<Test>::MonitoredPairsSubmitted(vec![
-			(BTC_CURRENCY.to_vec(), USDT_CURRENCY.to_vec(), MOCK_PROVIDER.to_vec(), Operation::Del),
-			(BTC_CURRENCY.to_vec(), ETH_CURRENCY.to_vec(),  MOCK_PROVIDER.to_vec(), Operation::Del),
+			(BTC_CURRENCY.to_vec(), USDT_CURRENCY.to_vec(), MOCK_PROVIDER, Operation::Del),
+			(BTC_CURRENCY.to_vec(), ETH_CURRENCY.to_vec(),  MOCK_PROVIDER, Operation::Del),
 		]))));
 
 		// validate mixture of additions and deletions
 		assert_ok!(Fixture::submit_monitored_pairs(Origin::root(), vec![
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: ETH_CURRENCY.to_vec(),   target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Del},
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BOGUS_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},  provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Del}, // expect it skipped in the event
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: USDT_CURRENCY.to_vec(),  target: ETH_CURRENCY.to_vec()},  provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Add},
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: ETH_CURRENCY.to_vec(),   target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER}, operation: Operation::Del},
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BOGUS_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},  provider: MOCK_PROVIDER}, operation: Operation::Del}, // expect it skipped in the event
+			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: USDT_CURRENCY.to_vec(),  target: ETH_CURRENCY.to_vec()},  provider: MOCK_PROVIDER}, operation: Operation::Add},
 		]));
 		assert_eq!(vec![
-				ProviderPair{pair: Pair{source: USDT_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()},
+				ProviderPair{pair: Pair{source: USDT_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()}, provider: MOCK_PROVIDER},
 			],
-			MonitoredPairs::<Test>::iter_keys().collect::<Vec<ProviderPair<Vec<u8>, Vec<u8>>>>()
+			MonitoredPairs::<Test>::iter_keys().collect::<Vec<ProviderPair<Vec<u8>>>>()
 		);
 		assert_eq!(last_event(), Some(Event::Fixture(crate::Event::<Test>::MonitoredPairsSubmitted(vec![
-			(ETH_CURRENCY.to_vec(),  USDT_CURRENCY.to_vec(), MOCK_PROVIDER.to_vec(), Operation::Del),
-			(USDT_CURRENCY.to_vec(), ETH_CURRENCY.to_vec(),  MOCK_PROVIDER.to_vec(), Operation::Add),
+			(ETH_CURRENCY.to_vec(),  USDT_CURRENCY.to_vec(), MOCK_PROVIDER, Operation::Del),
+			(USDT_CURRENCY.to_vec(), ETH_CURRENCY.to_vec(),  MOCK_PROVIDER, Operation::Add),
 		]))));
 	});
 }
@@ -246,22 +238,13 @@ fn test_submit_monitored_pairs_errors() {
 	new_test_ext().execute_with(|| {
 		// validate incorrect origins
 		assert_noop!(
-			Fixture::submit_monitored_pairs(Origin::signed(Default::default()), vec![ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Add}]),
+			Fixture::submit_monitored_pairs(Origin::signed(sp_core::sr25519::Public([0_u8; 32])), vec![ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER}, operation: Operation::Add}]),
 			BadOrigin);
 		assert_eq!(0, MonitoredPairs::<Test>::iter_keys().count());
 
 		assert_noop!(
-			Fixture::submit_monitored_pairs(Origin::none(), vec![ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()}, operation: Operation::Add}]),
+			Fixture::submit_monitored_pairs(Origin::none(), vec![ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER}, operation: Operation::Add}]),
 			BadOrigin);
-		assert_eq!(0, MonitoredPairs::<Test>::iter_keys().count());
-
-		// validate invalid providers
-		assert_noop!(Fixture::submit_monitored_pairs(Origin::root(), vec![
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: BOGUS_PROVIDER.to_vec()}, operation: Operation::Add},
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: ETH_CURRENCY.to_vec()},  provider: MOCK_PROVIDER.to_vec()},  operation: Operation::Add},
-			ProviderPairOperation{provider_pair: ProviderPair{pair: Pair{source: ETH_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()},  operation: Operation::Del}]),
-			Error::<Test>::UnknownTradeProviderError
-		);
 		assert_eq!(0, MonitoredPairs::<Test>::iter_keys().count());
 	});
 }
@@ -283,7 +266,6 @@ fn test_ocw_submit_best_paths_changes() {
 				<Test as SigningTypes>::Public,
 				<Test as frame_system::Config>::BlockNumber,
 				<Test as Config>::Currency,
-				<Test as Config>::Provider,
 				<Test as Config>::Amount,
 			> as SignedPayload<Test>>::sign::<crypto::TestAuthId>(&payload).unwrap();
 		assert_ok!(Fixture::ocw_submit_best_paths_changes(Origin::none(), payload.clone(), signature.clone()));
@@ -298,7 +280,6 @@ fn test_ocw_submit_best_paths_changes() {
 				<Test as SigningTypes>::Public,
 				<Test as frame_system::Config>::BlockNumber,
 				<Test as Config>::Currency,
-				<Test as Config>::Provider,
 				<Test as Config>::Amount,
 			> as SignedPayload<Test>>::sign::<crypto::TestAuthId>(&payload2).unwrap();
 		assert_noop!(Fixture::ocw_submit_best_paths_changes(Origin::root(), payload2, signature), BadOrigin);
@@ -318,7 +299,7 @@ fn test_fetch_prices_and_update_best_paths() {
 	// verify extrinsic was called
 	t.execute_with(|| {
 		MonitoredPairs::<Test>::insert(
-			ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER.to_vec()}, 
+			ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: MOCK_PROVIDER}, 
 			());
 
 		assert!(Fixture::fetch_prices_and_update_best_paths(1).is_ok());
@@ -338,23 +319,11 @@ fn test_fetch_prices_and_update_best_paths() {
 					<Test as SigningTypes>::Public,
 					<Test as frame_system::Config>::BlockNumber,
 					<Test as Config>::Currency,
-					<Test as Config>::Provider,
 					<Test as Config>::Amount,
 				> as SignedPayload<Test>>::verify::<crypto::TestAuthId>(&payload, signature);
 
 			assert!(signature_valid);
 		}
-	});
-
-	// verify no extrinsics on bogus provider in MonitoredPairs
-	let (t, _, pool_state, _) = &mut new_test_ext_with_keystore();
-	t.execute_with(|| {
-		MonitoredPairs::<Test>::insert(
-			ProviderPair{pair: Pair{source: BTC_CURRENCY.to_vec(), target: USDT_CURRENCY.to_vec()}, provider: BOGUS_PROVIDER.to_vec()}, 
-			());
-
-		assert!(Fixture::fetch_prices_and_update_best_paths(1).is_ok());
-		assert!(pool_state.write().transactions.is_empty());
 	});
 }
 

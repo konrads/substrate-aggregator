@@ -14,10 +14,11 @@ impl From<algo::PathCalculationError> for CalculatorError {
 }
 
 const PRECISION: f64 = 1_000_000_000_000.0;
+
 pub struct FloydWarshallCalculator {}
-impl<C: Currency, P: Provider, A: Amount> BestPathCalculator<C, P, A> for FloydWarshallCalculator {
+impl<C: Currency, A: Amount> BestPathCalculator<C, A> for FloydWarshallCalculator {
     /// Wraps Floyd-Warshall's algorithm that uses indexes from/into BestPathCalculator data structures
-	fn calc_best_paths(pairs_and_prices: &[(ProviderPair<C, P>, A)]) -> Result<BTreeMap<Pair<C>, PricePath<C, P, A>>, CalculatorError> {
+	fn calc_best_paths(pairs_and_prices: &[(ProviderPair<C>, A)]) -> Result<BTreeMap<Pair<C>, PricePath<C, A>>, CalculatorError> {
         // get unique and indexed currencies and providers
         let currencies = pairs_and_prices.iter().flat_map(|(ProviderPair { pair: Pair{source, target}, .. }, ..)| vec![source, target].into_iter())
             .collect::<BTreeSet<_>>().into_iter().collect::<Vec<_>>();
@@ -58,6 +59,8 @@ impl<C: Currency, P: Provider, A: Amount> BestPathCalculator<C, P, A> for FloydW
 mod tests {
     use super::*;
 
+    const MOCK_PROVIDER: Provider = Provider::CRYPTOCOMPARE;
+
     #[test]
     fn test_real_life_graph() {
         /*
@@ -76,19 +79,19 @@ mod tests {
         curl https://min-api.cryptocompare.com/data/price?fsym=BNB&tsyms=ETH   # {"ETH":0.1527}
         */
         let in_graph = vec![
-            ("BTC".to_owned(),  "USDT".to_owned(), "xxx".to_owned(), 5997.42),
-            ("USDT".to_owned(), "BTC".to_owned(),  "xxx".to_owned(), 0.00002777),
-            ("ETH".to_owned(),  "USDT".to_owned(), "xxx".to_owned(), 2384.99),
-            ("USDT".to_owned(), "ETH".to_owned(),  "xxx".to_owned(), 0.0004192),
-            ("BNB".to_owned(),  "USDT".to_owned(), "xxx".to_owned(), 364.19),
-            ("USDT".to_owned(), "BNB".to_owned(),  "xxx".to_owned(), 0.002745),
-            ("DOT".to_owned(),  "USDT".to_owned(), "xxx".to_owned(), 17.43),
-            ("USDT".to_owned(), "DOT".to_owned(),  "xxx".to_owned(), 0.05737),
-            ("BTC".to_owned(),  "ETH".to_owned(),  "xxx".to_owned(), 15.09),
-            ("ETH".to_owned(),  "BTC".to_owned(),  "xxx".to_owned(), 0.06626),
-            ("ETH".to_owned(),  "BNB".to_owned(),  "xxx".to_owned(), 6.548),
-            ("BNB".to_owned(),  "ETH".to_owned(),  "xxx".to_owned(), 0.1527),
-        ].into_iter().map(|(source, target, provider, cost)| (ProviderPair{pair: Pair{source: source.as_str().as_bytes().to_vec(), target: target.as_str().as_bytes().to_vec()}, provider: provider.as_str().as_bytes().to_vec()}, (cost * PRECISION) as u128)).collect::<Vec<_>>();
+            ("BTC".to_owned(),  "USDT".to_owned(), MOCK_PROVIDER, 5997.42),
+            ("USDT".to_owned(), "BTC".to_owned(),  MOCK_PROVIDER, 0.00002777),
+            ("ETH".to_owned(),  "USDT".to_owned(), MOCK_PROVIDER, 2384.99),
+            ("USDT".to_owned(), "ETH".to_owned(),  MOCK_PROVIDER, 0.0004192),
+            ("BNB".to_owned(),  "USDT".to_owned(), MOCK_PROVIDER, 364.19),
+            ("USDT".to_owned(), "BNB".to_owned(),  MOCK_PROVIDER, 0.002745),
+            ("DOT".to_owned(),  "USDT".to_owned(), MOCK_PROVIDER, 17.43),
+            ("USDT".to_owned(), "DOT".to_owned(),  MOCK_PROVIDER, 0.05737),
+            ("BTC".to_owned(),  "ETH".to_owned(),  MOCK_PROVIDER, 15.09),
+            ("ETH".to_owned(),  "BTC".to_owned(),  MOCK_PROVIDER, 0.06626),
+            ("ETH".to_owned(),  "BNB".to_owned(),  MOCK_PROVIDER, 6.548),
+            ("BNB".to_owned(),  "ETH".to_owned(),  MOCK_PROVIDER, 0.1527),
+        ].into_iter().map(|(source, target, provider, cost)| (ProviderPair{pair: Pair{source: source.as_str().as_bytes().to_vec(), target: target.as_str().as_bytes().to_vec()}, provider}, (cost * PRECISION) as u128)).collect::<Vec<_>>();
         let res_out = FloydWarshallCalculator::calc_best_paths(&in_graph).unwrap().into_iter().collect::<Vec<(_, _)>>()
             .into_iter().map(|(p, pp)|(
                 String::from_utf8(p.source).unwrap(),
@@ -97,36 +100,36 @@ mod tests {
                 pp.steps.into_iter().map(|PathStep{pair: Pair{source, target}, provider, cost}| (
                     String::from_utf8(source).unwrap(),
                     String::from_utf8(target).unwrap(),
-                    String::from_utf8(provider).unwrap(),
+                    provider,
                     cost as f64 / PRECISION,
-                )).collect::<Vec<(String, String, String, f64)>>())
-            ).collect::<Vec<(String, String, f64, Vec<(String, String, String, f64)>)>>();
+                )).collect::<Vec<(String, String, Provider, f64)>>())
+            ).collect::<Vec<(String, String, f64, Vec<(String, String, Provider, f64)>)>>();
         assert_eq!(
             vec![
                 ("BNB".to_owned(), "BNB".to_owned(), 1.0,                vec![]),
-                ("BNB".to_owned(), "BTC".to_owned(), 0.010117902,        vec![("BNB".to_owned(), "ETH".to_owned(), "xxx".to_owned(), 0.1527), ("ETH".to_owned(), "BTC".to_owned(), "xxx".to_owned(), 0.06626)]),
-                ("BNB".to_owned(), "DOT".to_owned(), 20.8935803,         vec![("BNB".to_owned(), "USDT".to_owned(), "xxx".to_owned(), 364.19), ("USDT".to_owned(), "DOT".to_owned(), "xxx".to_owned(), 0.05737)]),
-                ("BNB".to_owned(), "ETH".to_owned(), 0.1527,             vec![("BNB".to_owned(), "ETH".to_owned(), "xxx".to_owned(), 0.1527)]),
-                ("BNB".to_owned(), "USDT".to_owned(), 364.19,            vec![("BNB".to_owned(), "USDT".to_owned(), "xxx".to_owned(), 364.19)]),
-                ("BTC".to_owned(), "BNB".to_owned(), 98.80932,           vec![("BTC".to_owned(), "ETH".to_owned(), "xxx".to_owned(), 15.09), ("ETH".to_owned(), "BNB".to_owned(), "xxx".to_owned(), 6.548)]),
+                ("BNB".to_owned(), "BTC".to_owned(), 0.010117902,        vec![("BNB".to_owned(), "ETH".to_owned(), MOCK_PROVIDER, 0.1527), ("ETH".to_owned(), "BTC".to_owned(), MOCK_PROVIDER, 0.06626)]),
+                ("BNB".to_owned(), "DOT".to_owned(), 20.8935803,         vec![("BNB".to_owned(), "USDT".to_owned(), MOCK_PROVIDER, 364.19), ("USDT".to_owned(), "DOT".to_owned(), MOCK_PROVIDER, 0.05737)]),
+                ("BNB".to_owned(), "ETH".to_owned(), 0.1527,             vec![("BNB".to_owned(), "ETH".to_owned(), MOCK_PROVIDER, 0.1527)]),
+                ("BNB".to_owned(), "USDT".to_owned(), 364.19,            vec![("BNB".to_owned(), "USDT".to_owned(), MOCK_PROVIDER, 364.19)]),
+                ("BTC".to_owned(), "BNB".to_owned(), 98.80932,           vec![("BTC".to_owned(), "ETH".to_owned(), MOCK_PROVIDER, 15.09), ("ETH".to_owned(), "BNB".to_owned(), MOCK_PROVIDER, 6.548)]),
                 ("BTC".to_owned(), "BTC".to_owned(), 1.0,                vec![]),
-                ("BTC".to_owned(), "DOT".to_owned(), 2064.717563366999,  vec![("BTC".to_owned(), "ETH".to_owned(), "xxx".to_owned(), 15.09), ("ETH".to_owned(), "USDT".to_owned(), "xxx".to_owned(), 2384.99), ("USDT".to_owned(), "DOT".to_owned(), "xxx".to_owned(), 0.05737)]),
-                ("BTC".to_owned(), "ETH".to_owned(), 15.09,              vec![("BTC".to_owned(), "ETH".to_owned(), "xxx".to_owned(), 15.09)]),
-                ("BTC".to_owned(), "USDT".to_owned(), 35989.49909999999, vec![("BTC".to_owned(), "ETH".to_owned(), "xxx".to_owned(), 15.09), ("ETH".to_owned(), "USDT".to_owned(), "xxx".to_owned(), 2384.99)]),
-                ("DOT".to_owned(), "BNB".to_owned(), 0.04784535,         vec![("DOT".to_owned(), "USDT".to_owned(), "xxx".to_owned(), 17.43), ("USDT".to_owned(), "BNB".to_owned(), "xxx".to_owned(), 0.002745)]),
-                ("DOT".to_owned(), "BTC".to_owned(), 0.000484139026,     vec![("DOT".to_owned(), "USDT".to_owned(), "xxx".to_owned(), 17.43), ("USDT".to_owned(), "ETH".to_owned(), "xxx".to_owned(), 0.0004192), ("ETH".to_owned(), "BTC".to_owned(), "xxx".to_owned(), 0.06626)]),
+                ("BTC".to_owned(), "DOT".to_owned(), 2064.717563366999,  vec![("BTC".to_owned(), "ETH".to_owned(), MOCK_PROVIDER, 15.09), ("ETH".to_owned(), "USDT".to_owned(), MOCK_PROVIDER, 2384.99), ("USDT".to_owned(), "DOT".to_owned(), MOCK_PROVIDER, 0.05737)]),
+                ("BTC".to_owned(), "ETH".to_owned(), 15.09,              vec![("BTC".to_owned(), "ETH".to_owned(), MOCK_PROVIDER, 15.09)]),
+                ("BTC".to_owned(), "USDT".to_owned(), 35989.49909999999, vec![("BTC".to_owned(), "ETH".to_owned(), MOCK_PROVIDER, 15.09), ("ETH".to_owned(), "USDT".to_owned(), MOCK_PROVIDER, 2384.99)]),
+                ("DOT".to_owned(), "BNB".to_owned(), 0.04784535,         vec![("DOT".to_owned(), "USDT".to_owned(), MOCK_PROVIDER, 17.43), ("USDT".to_owned(), "BNB".to_owned(), MOCK_PROVIDER, 0.002745)]),
+                ("DOT".to_owned(), "BTC".to_owned(), 0.000484139026,     vec![("DOT".to_owned(), "USDT".to_owned(), MOCK_PROVIDER, 17.43), ("USDT".to_owned(), "ETH".to_owned(), MOCK_PROVIDER, 0.0004192), ("ETH".to_owned(), "BTC".to_owned(), MOCK_PROVIDER, 0.06626)]),
                 ("DOT".to_owned(), "DOT".to_owned(), 1.0,                vec![]),
-                ("DOT".to_owned(), "ETH".to_owned(), 0.007306656,        vec![("DOT".to_owned(), "USDT".to_owned(), "xxx".to_owned(), 17.43), ("USDT".to_owned(), "ETH".to_owned(), "xxx".to_owned(), 0.0004192)]),
-                ("DOT".to_owned(), "USDT".to_owned(), 17.43,             vec![("DOT".to_owned(), "USDT".to_owned(), "xxx".to_owned(), 17.43)]),
-                ("ETH".to_owned(), "BNB".to_owned(), 6.548,              vec![("ETH".to_owned(), "BNB".to_owned(), "xxx".to_owned(), 6.548)]),
-                ("ETH".to_owned(), "BTC".to_owned(), 0.06626,            vec![("ETH".to_owned(), "BTC".to_owned(), "xxx".to_owned(), 0.06626)]),
-                ("ETH".to_owned(), "DOT".to_owned(), 136.826876299999,   vec![("ETH".to_owned(), "USDT".to_owned(), "xxx".to_owned(), 2384.99), ("USDT".to_owned(), "DOT".to_owned(), "xxx".to_owned(), 0.05737)]),
+                ("DOT".to_owned(), "ETH".to_owned(), 0.007306656,        vec![("DOT".to_owned(), "USDT".to_owned(), MOCK_PROVIDER, 17.43), ("USDT".to_owned(), "ETH".to_owned(), MOCK_PROVIDER, 0.0004192)]),
+                ("DOT".to_owned(), "USDT".to_owned(), 17.43,             vec![("DOT".to_owned(), "USDT".to_owned(), MOCK_PROVIDER, 17.43)]),
+                ("ETH".to_owned(), "BNB".to_owned(), 6.548,              vec![("ETH".to_owned(), "BNB".to_owned(), MOCK_PROVIDER, 6.548)]),
+                ("ETH".to_owned(), "BTC".to_owned(), 0.06626,            vec![("ETH".to_owned(), "BTC".to_owned(), MOCK_PROVIDER, 0.06626)]),
+                ("ETH".to_owned(), "DOT".to_owned(), 136.826876299999,   vec![("ETH".to_owned(), "USDT".to_owned(), MOCK_PROVIDER, 2384.99), ("USDT".to_owned(), "DOT".to_owned(), MOCK_PROVIDER, 0.05737)]),
                 ("ETH".to_owned(), "ETH".to_owned(), 1.0,                vec![]),
-                ("ETH".to_owned(), "USDT".to_owned(), 2384.99,           vec![("ETH".to_owned(), "USDT".to_owned(), "xxx".to_owned(), 2384.99)]),
-                ("USDT".to_owned(), "BNB".to_owned(), 0.002745,          vec![("USDT".to_owned(), "BNB".to_owned(), "xxx".to_owned(), 0.002745)]),
-                ("USDT".to_owned(), "BTC".to_owned(), 2.7776192e-5,      vec![("USDT".to_owned(), "ETH".to_owned(), "xxx".to_owned(), 0.0004192), ("ETH".to_owned(), "BTC".to_owned(), "xxx".to_owned(), 0.06626)]),
-                ("USDT".to_owned(), "DOT".to_owned(), 0.05737,           vec![("USDT".to_owned(), "DOT".to_owned(), "xxx".to_owned(), 0.05737)]),
-                ("USDT".to_owned(), "ETH".to_owned(), 0.0004192,         vec![("USDT".to_owned(), "ETH".to_owned(), "xxx".to_owned(), 0.0004192)]),
+                ("ETH".to_owned(), "USDT".to_owned(), 2384.99,           vec![("ETH".to_owned(), "USDT".to_owned(), MOCK_PROVIDER, 2384.99)]),
+                ("USDT".to_owned(), "BNB".to_owned(), 0.002745,          vec![("USDT".to_owned(), "BNB".to_owned(), MOCK_PROVIDER, 0.002745)]),
+                ("USDT".to_owned(), "BTC".to_owned(), 2.7776192e-5,      vec![("USDT".to_owned(), "ETH".to_owned(), MOCK_PROVIDER, 0.0004192), ("ETH".to_owned(), "BTC".to_owned(), MOCK_PROVIDER, 0.06626)]),
+                ("USDT".to_owned(), "DOT".to_owned(), 0.05737,           vec![("USDT".to_owned(), "DOT".to_owned(), MOCK_PROVIDER, 0.05737)]),
+                ("USDT".to_owned(), "ETH".to_owned(), 0.0004192,         vec![("USDT".to_owned(), "ETH".to_owned(), MOCK_PROVIDER, 0.0004192)]),
                 ("USDT".to_owned(), "USDT".to_owned(), 1.0,              vec![])
             ],
             res_out);

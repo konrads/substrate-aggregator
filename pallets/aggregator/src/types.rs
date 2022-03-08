@@ -21,12 +21,14 @@ impl Conversions for Vec<u8> {
     }
 }
 
-pub trait Currency: Member + Parameter + Ord + Conversions {}
-impl <T: Member + Parameter + Ord + Conversions> Currency for T {}
+pub trait Currency: Member + Parameter + Ord + Conversions + AsRef<[u8]> {}
+impl <T: Member + Parameter + Ord + Conversions + AsRef<[u8]>> Currency for T {}
 
-pub trait Provider: Member + Parameter + Ord + Conversions {}
-impl <T: Member + Parameter + Ord + Conversions> Provider for T {}
-
+#[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo, Ord, PartialOrd)]
+#[allow(clippy::upper_case_acronyms)]
+pub enum Provider {
+    CRYPTOCOMPARE
+}
 pub trait Amount: Balance + Ord {}
 impl <T: Balance + Ord> Amount for T {}
 
@@ -39,29 +41,29 @@ pub struct Pair<C: Currency> {
 
 /// Per provider, source and target currency. Represents price points from each provider
 #[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo, Ord, PartialOrd)]
-pub struct ProviderPair<C: Currency, P: Provider> {
+pub struct ProviderPair<C: Currency> {
     pub pair: Pair<C>,
-    pub provider: P,
+    pub provider: Provider,
 }
 
 #[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub struct ProviderPairOperation<C: Currency, P: Provider> {
-    pub provider_pair: ProviderPair<C, P>,
+pub struct ProviderPairOperation<C: Currency> {
+    pub provider_pair: ProviderPair<C>,
     pub operation: Operation,
 }
 
 /// Path for every ProviderPair. Consists of `hops` and overall cost
 #[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub struct PricePath<C: Currency, P: Provider, A: Amount> {
+pub struct PricePath<C: Currency, A: Amount> {
     pub total_cost: A,
-    pub steps: Vec<PathStep<C, P, A>>,
+    pub steps: Vec<PathStep<C, A>>,
 }
 
 /// A `hop` between different currencies, via a provider.
 #[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub struct PathStep<C: Currency, P: Provider, A: Amount> {
+pub struct PathStep<C: Currency, A: Amount> {
     pub pair: Pair<C>,
-    pub provider: P,
+    pub provider: Provider,
     pub cost: A,
 }
 
