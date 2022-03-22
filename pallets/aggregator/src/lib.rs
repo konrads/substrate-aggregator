@@ -26,6 +26,9 @@ use sp_std::{convert::TryInto, iter::Iterator};
 use scale_info::prelude::{string::String, format};
 
 #[cfg(test)]
+mod mock;
+
+#[cfg(test)]
 mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]

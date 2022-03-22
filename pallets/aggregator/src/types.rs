@@ -29,8 +29,8 @@ impl <T: Member + Parameter + Ord + Conversions + AsRef<[u8]>> Currency for T {}
 pub enum Provider {
     CRYPTOCOMPARE
 }
-pub trait Amount: Balance + Ord {}
-impl <T: Balance + Ord> Amount for T {}
+pub trait Amount: Balance {}
+impl <T: Balance> Amount for T {}
 
 /// Per provider, source and target currency. Represents price points from each provider
 #[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo, Ord, PartialOrd)]
